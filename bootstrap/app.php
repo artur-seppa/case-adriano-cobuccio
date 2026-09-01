@@ -1,11 +1,13 @@
 <?php
 
+use App\Domain\Wallet\Support\ProblemMapper;
 use App\Http\Middleware\AssignRequestId;
 use App\Http\Middleware\EnsureIdempotency;
 use App\Http\Middleware\SetConnectionTimeouts;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -42,5 +44,11 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        //
+        $exceptions->render(function (Throwable $e, Request $request) {
+            if (! $request->expectsJson() && ! $request->is('api/*')) {
+                return null; // let the default handler run (should not happen on this API)
+            }
+
+            return ProblemMapper::map($e);
+        });
     })->create();
