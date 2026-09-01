@@ -1,5 +1,6 @@
 <?php
 
+use App\Domain\Wallet\Support\SystemWallets;
 use Illuminate\Foundation\Testing\DatabaseTruncation;
 use Tests\TestCase;
 
@@ -27,6 +28,7 @@ pest()->extend(TestCase::class)
 // tables between tests (fast).
 pest()->extend(TestCase::class)
     ->use(DatabaseTruncation::class)
+    ->beforeEach(fn () => SystemWallets::externalWorld())
     ->in('Integration');
 
 /*

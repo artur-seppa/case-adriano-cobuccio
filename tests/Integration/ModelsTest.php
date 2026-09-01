@@ -19,7 +19,7 @@ it('casts wallet balance to Money and keeps enum type', function () {
 it('exposes reversal linkage and isReversed()', function () {
     $user = User::factory()->create();
     $wallet = Wallet::factory()->forUser($user)->create();
-    $system = Wallet::factory()->system()->create();
+    $system = systemWallet();
 
     $original = Transaction::factory()->deposit()->create([
         'source_wallet_id' => $system->id, 'destination_wallet_id' => $wallet->id, 'amount_cents' => 100,

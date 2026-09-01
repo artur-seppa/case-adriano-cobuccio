@@ -1,6 +1,7 @@
 <?php
 
 use App\Domain\Wallet\Models\Wallet;
+use App\Domain\Wallet\Support\SystemWallets;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -8,10 +9,7 @@ use Illuminate\Support\Str;
 if (! function_exists('systemWallet')) {
     function systemWallet(): Wallet
     {
-        return Wallet::firstOrCreate(
-            ['reference' => 'external_world'],
-            Wallet::factory()->system()->raw(),
-        );
+        return SystemWallets::externalWorld();
     }
 }
 
@@ -45,12 +43,7 @@ if (! function_exists('seedWalletFixtures')) {
             'created_at' => now(), 'updated_at' => now(),
         ]);
 
-        $systemId = (string) Str::ulid();
-        DB::table('wallets')->insert([
-            'id' => $systemId, 'type' => 'system', 'user_id' => null,
-            'reference' => 'external_world', 'currency' => 'BRL', 'balance_cents' => 0, 'entry_count' => 0,
-            'created_at' => now(), 'updated_at' => now(),
-        ]);
+        $systemId = SystemWallets::externalWorld()->id;
 
         return ['user' => $userId, 'wallet' => $walletId, 'system' => $systemId];
     }
