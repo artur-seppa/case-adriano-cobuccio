@@ -1,6 +1,6 @@
 <?php
 
-use Illuminate\Foundation\Testing\DatabaseMigrations;
+use Illuminate\Foundation\Testing\DatabaseTruncation;
 use Tests\TestCase;
 
 /*
@@ -19,12 +19,14 @@ pest()->extend(TestCase::class)
     ->in('Feature');
 
 // Integration tests run against the real migrated Postgres `wallet_test` DB.
-// DatabaseMigrations (not RefreshDatabase) is required because the deferred
-// CONSTRAINT TRIGGER only fires on a real top-level COMMIT — RefreshDatabase
-// wraps each test in a transaction that is rolled back, so a deferred check
-// would never run.
+// DatabaseTruncation (not RefreshDatabase, not DatabaseMigrations) is used:
+// RefreshDatabase wraps each test in a never-committed transaction, so the
+// DEFERRABLE INITIALLY DEFERRED constraint trigger (fires at COMMIT) could
+// never run; DatabaseMigrations works but re-migrates per test (slow).
+// DatabaseTruncation lets real commits happen (trigger fires) and truncates
+// tables between tests (fast).
 pest()->extend(TestCase::class)
-    ->use(DatabaseMigrations::class)
+    ->use(DatabaseTruncation::class)
     ->in('Integration');
 
 /*

@@ -3,30 +3,8 @@
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
-function seedWalletFixtures(): array
-{
-    $userId = (string) Str::ulid();
-    DB::table('users')->insert([
-        'id' => $userId, 'name' => 'N', 'email' => 'n@example.test',
-        'password' => 'x', 'created_at' => now(), 'updated_at' => now(),
-    ]);
-
-    $walletId = (string) Str::ulid();
-    DB::table('wallets')->insert([
-        'id' => $walletId, 'type' => 'user', 'user_id' => $userId,
-        'reference' => null, 'currency' => 'BRL', 'balance_cents' => 0, 'entry_count' => 0,
-        'created_at' => now(), 'updated_at' => now(),
-    ]);
-
-    $systemId = (string) Str::ulid();
-    DB::table('wallets')->insert([
-        'id' => $systemId, 'type' => 'system', 'user_id' => null,
-        'reference' => 'external_world', 'currency' => 'BRL', 'balance_cents' => 0, 'entry_count' => 0,
-        'created_at' => now(), 'updated_at' => now(),
-    ]);
-
-    return ['user' => $userId, 'wallet' => $walletId, 'system' => $systemId];
-}
+// seedWalletFixtures() lives in tests/Support/helpers.php so Integration files
+// can share it without a file-scope redeclaration clash.
 
 it('rejects an unbalanced transaction at commit time', function () {
     ['user' => $userId, 'wallet' => $walletId, 'system' => $systemId] = seedWalletFixtures();
