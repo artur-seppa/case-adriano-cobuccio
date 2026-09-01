@@ -44,9 +44,14 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        // This is a JSON-only API: every path is under /api. Treat all errors as
+        // JSON so the handler never tries to redirect to a (non-existent) login
+        // view for a plain browser GET.
+        $exceptions->shouldRenderJsonWhen(fn (Request $request) => $request->is('api/*') || $request->expectsJson());
+
         $exceptions->render(function (Throwable $e, Request $request) {
             if (! $request->expectsJson() && ! $request->is('api/*')) {
-                return null; // let the default handler run (should not happen on this API)
+                return null; // non-API, non-JSON — let the default handler run
             }
 
             return ProblemMapper::map($e);

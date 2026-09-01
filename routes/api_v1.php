@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\V1\DepositController;
 use App\Http\Controllers\Api\V1\ReversalController;
 use App\Http\Controllers\Api\V1\SessionController;
+use App\Http\Controllers\Api\V1\StreamController;
 use App\Http\Controllers\Api\V1\TransactionController;
 use App\Http\Controllers\Api\V1\TransferController;
 use App\Http\Controllers\Api\V1\WalletController;
@@ -16,6 +17,8 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
 
     Route::get('/transactions', [TransactionController::class, 'index']);
     Route::get('/transactions/{transaction}', [TransactionController::class, 'show']);
+
+    Route::get('/stream', StreamController::class)->middleware('throttle:stream');
 
     Route::middleware(['verified', 'idempotency', 'throttle:transfers'])->group(function () {
         Route::post('/deposits', DepositController::class);
