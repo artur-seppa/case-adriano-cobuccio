@@ -31,6 +31,15 @@ pest()->extend(TestCase::class)
     ->beforeEach(fn () => SystemWallets::externalWorld())
     ->in('Integration');
 
+// Concurrency tests fork real OS processes (pcntl) that each open their own DB
+// connection, so they can only observe COMMITTED rows. DatabaseTruncation (no
+// wrapping transaction) lets the parent's setup writes commit before the fork;
+// RefreshDatabase would hide them inside an uncommitted transaction.
+pest()->extend(TestCase::class)
+    ->use(DatabaseTruncation::class)
+    ->beforeEach(fn () => SystemWallets::externalWorld())
+    ->in('Concurrency');
+
 /*
 |--------------------------------------------------------------------------
 | Expectations
