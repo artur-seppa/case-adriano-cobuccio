@@ -13,6 +13,16 @@ if (! function_exists('systemWallet')) {
     }
 }
 
+if (! function_exists('lockedPair')) {
+    function lockedPair(string $aId, string $bId): array
+    {
+        $ids = collect([$aId, $bId])->sort()->values()->all();
+        $wallets = Wallet::whereIn('id', $ids)->orderBy('id')->lockForUpdate()->get()->keyBy('id');
+
+        return [$wallets[$aId], $wallets[$bId]];
+    }
+}
+
 if (! function_exists('giveWallet')) {
     function giveWallet(User $user, int $cents = 0): Wallet
     {
