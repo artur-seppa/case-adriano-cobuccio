@@ -41,4 +41,4 @@ it('blocks money endpoints until the email is verified', function () {
         ])
         ->assertStatus(403)
         ->assertJsonPath('type', 'https://wallet.test/problems/forbidden');
-})->todo('unblocked in Task 11 (POST /api/v1/deposits route)');
+});

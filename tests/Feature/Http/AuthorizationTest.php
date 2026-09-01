@@ -35,9 +35,10 @@ it('lets the initiator and the counterparty view a transaction, no one else', fu
         ->and($carol->can('view', $transaction))->toBeFalse();
 });
 
-it('lets only the initiator reverse, and not a reversal, and not twice', function () {
+it('authorizes reverse on ownership only — business rules are the action\'s job', function () {
     [$alice, $bob, $transaction] = transferFixture();
 
+    // ownership: only the initiator is authorized to *ask*
     expect($alice->can('reverse', $transaction))->toBeTrue()
         ->and($bob->can('reverse', $transaction))->toBeFalse();
 
@@ -45,8 +46,10 @@ it('lets only the initiator reverse, and not a reversal, and not twice', functio
         transactionId: $transaction->id, reason: ReversalReason::UserRequest, initiatedByUserId: $alice->id,
     ));
 
-    expect($alice->can('reverse', $transaction->fresh()))->toBeFalse() // already reversed
-        ->and($alice->can('reverse', $reversal))->toBeFalse();          // cannot reverse a reversal
+    // already-reversed and reverse-a-reversal still pass the policy (alice owns
+    // both) — the endpoint returns 409 / 422 from the action, not 403.
+    expect($alice->can('reverse', $transaction->fresh()))->toBeTrue()
+        ->and($alice->can('reverse', $reversal))->toBeTrue();
 });
 
 it('lets the depositor view and reverse their own deposit', function () {

@@ -2,7 +2,6 @@
 
 namespace App\Domain\Wallet\Policies;
 
-use App\Domain\Wallet\Enums\TransactionType;
 use App\Domain\Wallet\Models\Transaction;
 use App\Models\User;
 
@@ -22,14 +21,14 @@ class TransactionPolicy
     }
 
     /**
-     * A user may reverse only a transaction they initiated, that is not itself a
-     * reversal, and that has not already been reversed. The ReverseTransaction
-     * action re-validates all of this authoritatively under lock.
+     * Authorization is ownership only: a user may only ask to reverse a
+     * transaction they initiated. Whether that transaction can actually be
+     * reversed (not already reversed → 409, not itself a reversal → 422) is a
+     * business rule the ReverseTransaction action enforces authoritatively under
+     * lock, so those cases surface as their proper domain errors, not a 403.
      */
     public function reverse(User $user, Transaction $transaction): bool
     {
-        return $transaction->initiator_id === $user->id
-            && $transaction->type !== TransactionType::Reversal
-            && ! $transaction->isReversed();
+        return $transaction->initiator_id === $user->id;
     }
 }
