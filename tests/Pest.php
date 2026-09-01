@@ -1,5 +1,6 @@
 <?php
 
+use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Tests\TestCase;
 
 /*
@@ -16,6 +17,15 @@ use Tests\TestCase;
 pest()->extend(TestCase::class)
  // ->use(Illuminate\Foundation\Testing\RefreshDatabase::class)
     ->in('Feature');
+
+// Integration tests run against the real migrated Postgres `wallet_test` DB.
+// DatabaseMigrations (not RefreshDatabase) is required because the deferred
+// CONSTRAINT TRIGGER only fires on a real top-level COMMIT — RefreshDatabase
+// wraps each test in a transaction that is rolled back, so a deferred check
+// would never run.
+pest()->extend(TestCase::class)
+    ->use(DatabaseMigrations::class)
+    ->in('Integration');
 
 /*
 |--------------------------------------------------------------------------
