@@ -101,7 +101,7 @@ return [
     |
     */
 
-    'middleware' => ['web'],
+    'middleware' => ['web', 'throttle:auth'],
 
     /*
     |--------------------------------------------------------------------------
@@ -114,8 +114,10 @@ return [
     |
     */
 
+    // Throttling is applied group-wide via `middleware` above (throttle:auth),
+    // so no per-route limiter is needed here.
     'limiters' => [
-        'login' => 'login',
+        'login' => null,
     ],
 
     /*

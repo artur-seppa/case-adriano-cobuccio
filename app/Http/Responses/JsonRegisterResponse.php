@@ -4,7 +4,7 @@ namespace App\Http\Responses;
 
 use Laravel\Fortify\Contracts\RegisterResponse;
 
-class JsonRegisterResponse implements RegisterResponse
+final class JsonRegisterResponse implements RegisterResponse
 {
     public function toResponse($request)
     {

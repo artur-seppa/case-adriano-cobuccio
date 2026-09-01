@@ -26,11 +26,7 @@ arch('domain avoids facades for DB access')
     ->expect('App\Domain\Wallet\Actions')
     ->not->toUse('Illuminate\Support\Facades\DB');
 
-// ---- HTTP layer (Plan 2) --------------------------------------------------
-
-arch('the domain still does not reach into http')
-    ->expect('App\Domain\Wallet')
-    ->not->toUse('App\Http');
+// ---- HTTP layer ---------------------------------------------------------
 
 arch('controllers do not run raw SQL')
     ->expect('App\Http\Controllers')

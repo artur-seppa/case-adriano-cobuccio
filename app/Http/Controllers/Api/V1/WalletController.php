@@ -17,11 +17,13 @@ class WalletController extends Controller
 
     public function statement(Request $request): AnonymousResourceCollection
     {
+        $perPage = min(max($request->integer('per_page', 20), 1), 100);
+
         $entries = $request->user()->wallet()->firstOrFail()
             ->ledgerEntries()
             ->with('transaction:id,type')
             ->orderByDesc('sequence')
-            ->cursorPaginate($request->integer('per_page', 20));
+            ->cursorPaginate($perPage);
 
         return LedgerEntryResource::collection($entries);
     }

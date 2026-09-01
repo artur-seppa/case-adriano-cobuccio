@@ -64,3 +64,19 @@ it('lists and revokes other sessions but not the current one', function () {
 
     expect(DB::table('sessions')->where('id', 'other-session-id')->exists())->toBeFalse();
 });
+
+it('cannot delete another user\'s session', function () {
+    $user = User::factory()->create();
+    $victim = User::factory()->create();
+    Wallet::factory()->forUser($user)->create();
+
+    DB::table('sessions')->insert([
+        'id' => 'victim-session', 'user_id' => $victim->id, 'ip_address' => '10.0.0.1',
+        'user_agent' => 'V/1.0', 'payload' => '', 'last_activity' => now()->timestamp,
+    ]);
+
+    $this->actingAs($user, 'sanctum')->deleteJson('/api/v1/wallet/sessions/victim-session')
+        ->assertNoContent(); // scoped delete is a no-op, not an error
+
+    expect(DB::table('sessions')->where('id', 'victim-session')->exists())->toBeTrue();
+});

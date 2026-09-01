@@ -14,7 +14,7 @@ use Laravel\Fortify\Contracts\VerifyEmailResponse;
  * meaningful body in a headless API (login, logout, password reset/update,
  * profile update, email verification).
  */
-class JsonNoContentResponse implements LoginResponse, LogoutResponse, PasswordResetResponse, PasswordUpdateResponse, ProfileInformationUpdatedResponse, VerifyEmailResponse
+final class JsonNoContentResponse implements LoginResponse, LogoutResponse, PasswordResetResponse, PasswordUpdateResponse, ProfileInformationUpdatedResponse, VerifyEmailResponse
 {
     public function toResponse($request)
     {

@@ -179,6 +179,19 @@ return [
             'backoff_cap' => env('REDIS_BACKOFF_CAP', 1000),
         ],
 
+        // Dedicated connection for the SSE stream: a finite read timeout lets the
+        // subscribe loop wake up on idle to send a heartbeat and check for a
+        // dropped client, instead of blocking forever on the next message.
+        'pubsub' => [
+            'url' => env('REDIS_URL'),
+            'host' => env('REDIS_HOST', '127.0.0.1'),
+            'username' => env('REDIS_USERNAME'),
+            'password' => env('REDIS_PASSWORD'),
+            'port' => env('REDIS_PORT', '6379'),
+            'database' => env('REDIS_DB', '0'),
+            'read_write_timeout' => env('REDIS_PUBSUB_READ_TIMEOUT', 5),
+        ],
+
     ],
 
 ];

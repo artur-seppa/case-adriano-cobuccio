@@ -87,11 +87,14 @@ final class ProblemMapper
             default => 'http-error',
         };
 
+        // Never echo an exception message on a 5xx — it may carry internals.
+        $detail = $status < 500 && $e->getMessage() !== '' ? $e->getMessage() : null;
+
         return ProblemDetails::response(
             $status,
             $slug,
             $status >= 500 ? 'Server error.' : 'Request could not be processed.',
-            $e->getMessage() !== '' ? $e->getMessage() : null,
+            $detail,
         )->withHeaders($e->getHeaders());
     }
 

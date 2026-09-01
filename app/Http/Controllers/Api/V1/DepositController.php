@@ -16,6 +16,7 @@ class DepositController extends Controller
 
         return (new TransactionResource($transaction->load(
             'sourceWallet.user:id,name,email',
+            'reversalTransaction:id,reversal_of_transaction_id',
             'destinationWallet.user:id,name,email',
         )))->response()->setStatusCode(201);
     }

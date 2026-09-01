@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Validation\Rules\Password;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -41,13 +42,30 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('stream', fn (Request $request) => Limit::perMinute(12)
             ->by($request->user()->id));
 
+        // All Fortify auth routes (login, register, forgot/reset password, ...):
+        // 5/min keyed on email+IP, IP-only when there is no email field. Blocks
+        // credential stuffing, account-creation floods and forgot-password abuse.
+        RateLimiter::for('auth', function (Request $request) {
+            $email = (string) $request->input('email', '');
+            $key = $email !== ''
+                ? mb_strtolower($email).'|'.$request->ip()
+                : (string) $request->ip();
+
+            return Limit::perMinute(5)->by($key);
+        });
+
         // Post-commit realtime fan-out (spec §6.6 / §11).
         Event::listen(FundsDeposited::class, [PublishUserEvent::class, 'handleDeposited']);
         Event::listen(FundsTransferred::class, [PublishUserEvent::class, 'handleTransferred']);
         Event::listen(TransactionReversed::class, [PublishUserEvent::class, 'handleReversed']);
 
         // OpenAPI docs (/docs/api): open everywhere except production, where an
-        // authenticated user is required. Plan 4 tightens this further.
+        // authenticated user is required.
         Gate::define('viewApiDocs', fn ($user = null) => ! app()->environment('production') || $user !== null);
+
+        // Financial app: passwords are at least 10 chars, mixed case + a digit.
+        Password::defaults(fn () => app()->isProduction()
+            ? Password::min(10)->mixedCase()->numbers()
+            : Password::min(10));
     }
 }

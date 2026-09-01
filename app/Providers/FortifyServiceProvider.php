@@ -8,11 +8,7 @@ use App\Actions\Fortify\UpdateUserPassword;
 use App\Actions\Fortify\UpdateUserProfileInformation;
 use App\Http\Responses\JsonNoContentResponse;
 use App\Http\Responses\JsonRegisterResponse;
-use Illuminate\Cache\RateLimiting\Limit;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
-use Illuminate\Support\Str;
 use Laravel\Fortify\Contracts\LoginResponse;
 use Laravel\Fortify\Contracts\LogoutResponse;
 use Laravel\Fortify\Contracts\PasswordResetResponse;
@@ -50,12 +46,5 @@ class FortifyServiceProvider extends ServiceProvider
         $this->app->singleton(ProfileInformationUpdatedResponse::class, JsonNoContentResponse::class);
         $this->app->singleton(VerifyEmailResponse::class, JsonNoContentResponse::class);
         $this->app->singleton(RegisterResponse::class, JsonRegisterResponse::class);
-
-        // throttle:auth (spec §10.6) — 5/min per email+IP on login/register.
-        RateLimiter::for('login', function (Request $request) {
-            $throttleKey = Str::transliterate(Str::lower($request->input(Fortify::username())).'|'.$request->ip());
-
-            return Limit::perMinute(5)->by($throttleKey);
-        });
     }
 }

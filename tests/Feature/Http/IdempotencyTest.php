@@ -72,6 +72,38 @@ it('returns 422 when the same key is reused with a different body', function () 
         ->assertJsonPath('type', 'https://wallet.test/problems/idempotency-key-reused');
 });
 
+it('never replays another user\'s response for a colliding key', function () {
+    $alice = idemUser();
+    $bob = idemUser();
+    $key = (string) Str::uuid();
+    $body = ['amount' => '25.00', 'currency' => 'BRL'];
+
+    $aliceRes = $this->actingAs($alice, 'sanctum')
+        ->postJson('/__probe/idem', $body, ['Idempotency-Key' => $key])->assertCreated();
+
+    // Bob presents Alice's key with the same body — must NOT get Alice's response.
+    $this->actingAs($bob, 'sanctum')
+        ->postJson('/__probe/idem', $body, ['Idempotency-Key' => $key])
+        ->assertStatus(422)
+        ->assertJsonPath('type', 'https://wallet.test/problems/idempotency-key-reused');
+
+    expect(DB::table('idempotency_keys')->where('key', $key)->value('user_id'))->toBe($alice->id);
+});
+
+it('cleans up the locked row when the handler 5xxs, so a retry can proceed', function () {
+    $user = idemUser();
+    $key = (string) Str::uuid();
+
+    Route::middleware(['api', 'auth:sanctum', 'idempotency'])
+        ->post('/__probe/boom', fn () => abort(500));
+
+    $this->actingAs($user, 'sanctum')
+        ->postJson('/__probe/boom', ['x' => 1], ['Idempotency-Key' => $key])
+        ->assertStatus(500);
+
+    expect(DB::table('idempotency_keys')->where('key', $key)->exists())->toBeFalse();
+});
+
 it('returns 409 while a key is still locked', function () {
     $user = idemUser();
     $key = (string) Str::uuid();

@@ -20,38 +20,47 @@ class TransactionController extends Controller
 
     public function index(Request $request): AnonymousResourceCollection
     {
+        $filters = $request->validate([
+            'type' => ['sometimes', 'in:deposit,transfer,reversal'],
+            'direction' => ['sometimes', 'in:in,out'],
+            'status' => ['sometimes', 'in:completed,reversed'],
+            'from' => ['sometimes', 'date'],
+            'to' => ['sometimes', 'date'],
+            'per_page' => ['sometimes', 'integer', 'min:1', 'max:100'],
+        ]);
+
         $userId = $request->user()->id;
-        $walletIds = $request->user()->wallet()->pluck('id');
+        $walletIds = $request->user()->wallet()->pluck('id')->all();
 
         $query = Transaction::query()
             ->with(self::EAGER)
-            ->where(function ($q) use ($userId) {
+            ->where(function ($q) use ($userId, $walletIds) {
                 $q->where('initiator_id', $userId)
-                    ->orWhereHas('sourceWallet', fn ($w) => $w->where('user_id', $userId))
-                    ->orWhereHas('destinationWallet', fn ($w) => $w->where('user_id', $userId));
+                    ->orWhereIn('source_wallet_id', $walletIds)
+                    ->orWhereIn('destination_wallet_id', $walletIds);
             });
 
-        if ($type = $request->string('type')->value()) {
-            $query->where('type', $type);
+        if (isset($filters['type'])) {
+            $query->where('type', $filters['type']);
         }
-        if ($request->filled('from')) {
+        if (isset($filters['from'])) {
             $query->where('created_at', '>=', $request->date('from'));
         }
-        if ($request->filled('to')) {
+        if (isset($filters['to'])) {
             $query->where('created_at', '<=', $request->date('to'));
         }
-        if (($direction = $request->string('direction')->value()) && in_array($direction, ['in', 'out'], true)) {
-            $column = $direction === 'out' ? 'source_wallet_id' : 'destination_wallet_id';
+        if (isset($filters['direction'])) {
+            $column = $filters['direction'] === 'out' ? 'source_wallet_id' : 'destination_wallet_id';
             $query->whereIn($column, $walletIds);
         }
-        if (($status = $request->string('status')->value()) === 'reversed') {
+        if (($filters['status'] ?? null) === 'reversed') {
             $query->whereHas('reversalTransaction');
-        } elseif ($status === 'completed') {
+        } elseif (($filters['status'] ?? null) === 'completed') {
             $query->whereDoesntHave('reversalTransaction');
         }
 
         $page = $query->orderByDesc('created_at')->orderByDesc('id')
-            ->cursorPaginate($request->integer('per_page', 20));
+            ->cursorPaginate($filters['per_page'] ?? 20);
 
         return TransactionResource::collection($page);
     }

@@ -46,7 +46,7 @@ class EnsureIdempotency
         ]);
 
         if ($inserted === 0) {
-            return $this->replayOrConflict($key, $fingerprint);
+            return $this->replayOrConflict($key, $fingerprint, $request->user()->id, $request->path());
         }
 
         try {
@@ -77,9 +77,20 @@ class EnsureIdempotency
         return $response;
     }
 
-    private function replayOrConflict(string $key, string $fingerprint): Response
+    private function replayOrConflict(string $key, string $fingerprint, string $userId, string $path): Response
     {
         $row = DB::table('idempotency_keys')->where('key', $key)->first();
+
+        // The key exists but belongs to another user, or was used on a different
+        // route: a client-chosen UUID collision. Never replay someone else's
+        // response body (it carries their transaction, amounts, counterparty).
+        if ($row->user_id !== $userId || $row->path !== $path) {
+            return ProblemDetails::response(
+                422,
+                'idempotency-key-reused',
+                'This Idempotency-Key was already used for a different request.',
+            );
+        }
 
         if ($row->status === 'locked') {
             return ProblemDetails::response(

@@ -7,7 +7,7 @@ use App\Models\User;
 use Illuminate\Validation\ValidationException;
 use Laravel\Fortify\Contracts\CreatesNewUsers;
 
-class CreateNewUser implements CreatesNewUsers
+final class CreateNewUser implements CreatesNewUsers
 {
     /**
      * Validate and create a newly registered user together with their wallet.

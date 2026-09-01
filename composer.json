@@ -12,7 +12,8 @@
         "laravel/framework": "^12.0",
         "laravel/sanctum": "^4.0",
         "laravel/tinker": "^2.10.1",
-        "moneyphp/money": "^4.5"
+        "moneyphp/money": "^4.5",
+        "predis/predis": "^3.6"
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",
@@ -24,8 +25,7 @@
         "pestphp/pest": "^3.0",
         "pestphp/pest-plugin-arch": "^3.0",
         "pestphp/pest-plugin-laravel": "^3.0",
-        "phpunit/phpunit": "^11.5.50",
-        "predis/predis": "^3.6"
+        "phpunit/phpunit": "^11.5.50"
     },
     "autoload": {
         "psr-4": {

@@ -58,3 +58,16 @@ it('404s an unknown transaction', function () {
     $this->actingAs($alice, 'sanctum')->getJson('/api/v1/transactions/01JZZZNONEXISTENT0000000000')
         ->assertStatus(404)->assertJsonPath('type', 'https://wallet.test/problems/not-found');
 });
+
+it('rejects a bad per_page or date filter with 422, not 500', function () {
+    [$alice] = queryFixture();
+
+    $this->actingAs($alice, 'sanctum')->getJson('/api/v1/transactions?per_page=-1')
+        ->assertStatus(422)->assertJsonPath('type', 'https://wallet.test/problems/validation-failed');
+
+    $this->actingAs($alice, 'sanctum')->getJson('/api/v1/transactions?per_page=100000')
+        ->assertStatus(422);
+
+    $this->actingAs($alice, 'sanctum')->getJson('/api/v1/transactions?from=not-a-date')
+        ->assertStatus(422);
+});

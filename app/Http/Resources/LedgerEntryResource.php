@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Domain\Wallet\Models\LedgerEntry;
+use App\Domain\Wallet\ValueObjects\Money;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 /** @mixin LedgerEntry */
@@ -19,7 +20,7 @@ class LedgerEntryResource extends JsonResource
             'amount' => $this->amount->decimalString(),
             'amount_cents' => $this->amount_cents,
             'amount_formatted' => $this->amount->formatBRL(),
-            'balance_after' => number_format($this->balance_after_cents / 100, 2, '.', ''),
+            'balance_after' => Money::fromCents($this->balance_after_cents, $this->currency)->decimalString(),
             'balance_after_cents' => $this->balance_after_cents,
             'transaction' => [
                 'id' => $this->transaction_id,

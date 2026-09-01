@@ -24,6 +24,8 @@ it('throttles money writes at 10/min per user', function () {
 });
 
 it('throttles reads at 60/min per user', function () {
+    $this->freezeTime(); // keep all 61 hits inside one rate-limit window
+
     $user = User::factory()->create();
     Wallet::factory()->forUser($user)->create();
 

@@ -6,6 +6,8 @@ use App\Domain\Wallet\Support\ProblemDetails;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -28,13 +30,13 @@ class SessionController extends Controller
                 'id' => $session->id,
                 'ip_address' => $session->ip_address,
                 'user_agent' => $session->user_agent,
-                'last_active' => now()->createFromTimestamp($session->last_activity)->toIso8601String(),
+                'last_active' => Carbon::createFromTimestamp($session->last_activity)->toIso8601String(),
                 'is_current' => $currentId !== null && hash_equals($session->id, $currentId),
             ])->all(),
         ]);
     }
 
-    public function destroy(Request $request, string $id): JsonResponse
+    public function destroy(Request $request, string $id): JsonResponse|Response
     {
         $currentId = $this->currentSessionId($request);
 
@@ -51,7 +53,7 @@ class SessionController extends Controller
             ->where('id', $id)
             ->delete();
 
-        return response()->json(null, 204);
+        return response()->noContent();
     }
 
     private function currentSessionId(Request $request): ?string
