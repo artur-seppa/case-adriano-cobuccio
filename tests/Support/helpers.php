@@ -1,7 +1,13 @@
 <?php
 
+use App\Domain\Wallet\Actions\DepositFunds;
+use App\Domain\Wallet\Actions\TransferFunds;
+use App\Domain\Wallet\DTOs\DepositData;
+use App\Domain\Wallet\DTOs\TransferData;
+use App\Domain\Wallet\Models\Transaction;
 use App\Domain\Wallet\Models\Wallet;
 use App\Domain\Wallet\Support\SystemWallets;
+use App\Domain\Wallet\ValueObjects\Money;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -29,11 +35,29 @@ if (! function_exists('giveWallet')) {
         $wallet = Wallet::factory()->forUser($user)->create();
 
         if ($cents > 0) {
-            // TODO(CP7): replace with app(DepositFunds::class)(new DepositData(...))
-            $wallet->update(['balance_cents' => $cents]);
+            app(DepositFunds::class)(
+                new DepositData(
+                    userId: $user->id,
+                    amount: Money::fromCents($cents),
+                ),
+            );
+            $wallet->refresh();
         }
 
         return $wallet;
+    }
+}
+
+if (! function_exists('transferBetween')) {
+    function transferBetween(User $from, User $to, int $cents): Transaction
+    {
+        return app(TransferFunds::class)(
+            new TransferData(
+                senderId: $from->id,
+                recipientId: $to->id,
+                amount: Money::fromCents($cents),
+            ),
+        );
     }
 }
 
