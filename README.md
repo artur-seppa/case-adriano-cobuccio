@@ -118,7 +118,9 @@ IP+email · stream 12/min. Estouro → `429` + header `Retry-After`, corpo `prob
 | `php artisan scramble:export --path=openapi.json` | exporta o mesmo documento pra arquivo |
 
 O contrato é derivado **mecanicamente** dos Form Requests e Resources — não há anotação a
-manter em dia. Fora de `local`, `/docs/*` fica atrás do gate `viewApiDocs`.
+manter em dia. Os endpoints são agrupados em seções na UI (Autenticação, Carteira, Transações,
+Depósitos, Transferências, Estornos, Sessões, Tempo real). Fora de `local`, `/docs/*` fica
+atrás do gate `viewApiDocs`.
 
 ---
 
