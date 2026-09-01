@@ -20,6 +20,7 @@ class StoreReversalRequest extends FormRequest
     public function rules(): array
     {
         return [
+            /** @example "Cobrança em duplicidade" */
             'note' => ['nullable', 'string', 'max:500'],
         ];
     }

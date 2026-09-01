@@ -19,6 +19,23 @@ it('serves the docs UI page', function () {
     $this->get('/docs/api')->assertOk();
 });
 
+it('carries concrete request examples and the Idempotency-Key header', function () {
+    $doc = $this->getJson('/docs/api.json')->assertOk()->json();
+
+    $deposit = $doc['components']['schemas']['StoreDepositRequest']['properties'];
+    expect($deposit['amount']['examples'])->toBe(['150.00'])
+        ->and($deposit['currency']['examples'])->toBe(['BRL']);
+
+    expect($doc['components']['schemas']['StoreTransferRequest']['properties']['recipient']['examples'])
+        ->toBe(['bruno@wallet.test']);
+
+    $header = collect($doc['paths']['/v1/deposits']['post']['parameters'])
+        ->firstWhere('name', 'Idempotency-Key');
+    expect($header)->not->toBeNull()
+        ->and($header['required'])->toBeTrue()
+        ->and($header['example'])->not->toBeEmpty();
+});
+
 it('groups endpoints into ordered sections', function () {
     $doc = $this->getJson('/docs/api.json')->assertOk()->json();
 

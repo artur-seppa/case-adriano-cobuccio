@@ -19,9 +19,13 @@ class StoreTransferRequest extends FormRequest
     public function rules(): array
     {
         return [
+            /** @example "bruno@wallet.test" */
             'recipient' => ['required', 'string', 'max:255'],
+            /** @example "120.00" */
             'amount' => ['required', new AsMoney],
+            /** @example "BRL" */
             'currency' => ['required', 'in:BRL'],
+            /** @example "Aluguel de março" */
             'description' => ['nullable', 'string', 'max:255'],
         ];
     }

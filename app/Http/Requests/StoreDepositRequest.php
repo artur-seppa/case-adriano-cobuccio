@@ -15,9 +15,13 @@ class StoreDepositRequest extends FormRequest
     public function rules(): array
     {
         return [
+            /** @example "150.00" */
             'amount' => ['required', new AsMoney],
+            /** @example "BRL" */
             'currency' => ['required', 'in:BRL'],
+            /** @example "pix" */
             'funding_method' => ['nullable', 'in:pix,boleto'],
+            /** @example "Aporte via Pix" */
             'description' => ['nullable', 'string', 'max:255'],
         ];
     }
