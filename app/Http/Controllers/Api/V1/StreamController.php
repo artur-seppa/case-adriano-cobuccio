@@ -38,7 +38,14 @@ class StreamController extends Controller
             abort(429, 'Too many concurrent streams for this user.');
         }
 
-        $release = function () use ($slot) {
+        // Exactly-once release: the generator's finally runs on a normal close;
+        // the shutdown function is the fallback for a fatal/timeout that skips it.
+        $released = false;
+        $release = function () use ($slot, &$released) {
+            if ($released) {
+                return;
+            }
+            $released = true;
             Cache::decrement($slot);
         };
         register_shutdown_function($release);
