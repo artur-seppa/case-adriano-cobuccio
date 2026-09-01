@@ -1,6 +1,8 @@
 <?php
 
+use App\Http\Middleware\AssignRequestId;
 use App\Http\Middleware\EnsureIdempotency;
+use App\Http\Middleware\SetConnectionTimeouts;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -21,14 +23,18 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->statefulApi(); // Sanctum: EnsureFrontendRequestsAreStateful on the 'api' group
 
-        $middleware->api(prepend: [
-            // TODO Task 2: uncomment
-            // \App\Http\Middleware\AssignRequestId::class,
-        ]);
+        // Global: every HTTP response (health check + error responses included)
+        // must carry X-Request-Id. The `/up` health route has no middleware
+        // group in Laravel 12, so group-scoped wiring would miss it.
+        $middleware->prepend(AssignRequestId::class);
+
+        // Per-request Postgres timeouts on the request-serving guards only —
+        // never console/queue. The `/api/v1` money routes run through `api`.
         $middleware->web(append: [
-            // TODO Task 2: uncomment
-            // \App\Http\Middleware\AssignRequestId::class,
-            // \App\Http\Middleware\SetConnectionTimeouts::class,
+            SetConnectionTimeouts::class,
+        ]);
+        $middleware->api(append: [
+            SetConnectionTimeouts::class,
         ]);
 
         $middleware->alias([
