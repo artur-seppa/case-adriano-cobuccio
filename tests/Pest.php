@@ -1,5 +1,7 @@
 <?php
 
+use App\Domain\Wallet\Support\SystemWallets;
+use Illuminate\Foundation\Testing\DatabaseTruncation;
 use Tests\TestCase;
 
 /*
@@ -16,6 +18,27 @@ use Tests\TestCase;
 pest()->extend(TestCase::class)
  // ->use(Illuminate\Foundation\Testing\RefreshDatabase::class)
     ->in('Feature');
+
+// Integration tests run against the real migrated Postgres `wallet_test` DB.
+// DatabaseTruncation (not RefreshDatabase, not DatabaseMigrations) is used:
+// RefreshDatabase wraps each test in a never-committed transaction, so the
+// DEFERRABLE INITIALLY DEFERRED constraint trigger (fires at COMMIT) could
+// never run; DatabaseMigrations works but re-migrates per test (slow).
+// DatabaseTruncation lets real commits happen (trigger fires) and truncates
+// tables between tests (fast).
+pest()->extend(TestCase::class)
+    ->use(DatabaseTruncation::class)
+    ->beforeEach(fn () => SystemWallets::externalWorld())
+    ->in('Integration');
+
+// Concurrency tests fork real OS processes (pcntl) that each open their own DB
+// connection, so they can only observe COMMITTED rows. DatabaseTruncation (no
+// wrapping transaction) lets the parent's setup writes commit before the fork;
+// RefreshDatabase would hide them inside an uncommitted transaction.
+pest()->extend(TestCase::class)
+    ->use(DatabaseTruncation::class)
+    ->beforeEach(fn () => SystemWallets::externalWorld())
+    ->in('Concurrency');
 
 /*
 |--------------------------------------------------------------------------
