@@ -63,11 +63,17 @@ cp .env.example .env
 composer install
 docker compose up -d        # postgres (bases wallet + wallet_test) + redis
 php artisan key:generate
-php artisan migrate --seed   # cria as tabelas e semeia a carteira external_world
+php artisan migrate --seed   # tabelas + carteira external_world (+ dados de demo em local)
 ```
 
 O compose expõe Postgres em `localhost:5442` e Redis em `localhost:6389` (portas remapeadas
 para não colidir com instâncias locais); `.env` e `.env.testing` já apontam para lá.
+
+Em `APP_ENV=local`, o `--seed` também roda o **`DemoSeeder`**: 3 usuários verificados
+(`alice@wallet.test`, `bruno@wallet.test`, `carla@wallet.test`, senha `Password1234`), cada um
+com carteira financiada, 3 transferências entre eles e 1 estorno — tudo pelas Actions reais, o
+`wallet:reconcile` passa em seguida. Roda também isolado com
+`php artisan db:seed --class="Database\Seeders\DemoSeeder"`; nunca em produção.
 
 ### Testes
 
@@ -198,7 +204,8 @@ tests/                    Unit · Feature · Integration · Concurrency · Arch
 ## Comandos
 
 ```bash
-php artisan migrate --seed          # schema + carteira external_world
+php artisan migrate --seed          # schema + external_world (+ DemoSeeder em local)
+php artisan db:seed --class="Database\Seeders\DemoSeeder"   # dados de demo, standalone
 php artisan wallet:reconcile        # verifica a invariante contábil (--fix reescreve o cache a partir do ledger)
 php artisan idempotency:prune       # limpa idempotency_keys expiradas
 php artisan scramble:export         # exporta o OpenAPI

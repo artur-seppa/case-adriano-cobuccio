@@ -2,7 +2,6 @@
 
 namespace Database\Seeders;
 
-use App\Models\User;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
@@ -10,18 +9,14 @@ class DatabaseSeeder extends Seeder
 {
     use WithoutModelEvents;
 
-    /**
-     * Seed the application's database.
-     */
     public function run(): void
     {
+        // Always: the system counterparty wallet the ledger needs (prod-safe).
         $this->call(SystemWalletSeeder::class);
 
-        // User::factory(10)->create();
-
-        User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
-        ]);
+        // Local only: a walkthrough dataset (users, wallets, transfers, a reversal).
+        if (app()->environment('local')) {
+            $this->call(DemoSeeder::class);
+        }
     }
 }
