@@ -64,7 +64,13 @@ composer install
 docker compose up -d        # postgres (bases wallet + wallet_test) + redis
 php artisan key:generate
 php artisan migrate --seed   # tabelas + carteira external_world (+ dados de demo em local)
+
+php artisan serve            # sobe a API em http://localhost:8000
 ```
+
+Com a API no ar: contrato em `http://localhost:8000/docs/api`, e um cron/worker de
+agendamento com `php artisan schedule:work` (reconcile a cada 15 min, prune de hora em hora).
+O empacotamento de produção (FrankenPHP/Octane + reverse proxy) ainda não está no repositório.
 
 O compose expõe Postgres em `localhost:5442` e Redis em `localhost:6389` (portas remapeadas
 para não colidir com instâncias locais); `.env` e `.env.testing` já apontam para lá.
@@ -83,7 +89,7 @@ php artisan test             # unit + integração + HTTP + concorrência + arqu
 php artisan wallet:reconcile # invariante contábil — exit 0 saudável, 1 drift
 ```
 
-Ou via `make`: `up` · `down` · `fresh` · `test` · `pint` · `reconcile` · `docs` · `routes`.
+Ou via `make`: `up` · `down` · `serve` · `fresh` · `test` · `pint` · `reconcile` · `schedule` · `docs` · `routes`.
 
 A suíte roda contra **PostgreSQL real** (`wallet_test`), nunca SQLite — o trigger contábil só
 dispara em commit de verdade. A suíte `tests/Concurrency` forka processos reais com `pcntl`
