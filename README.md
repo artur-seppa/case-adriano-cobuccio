@@ -1,59 +1,56 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Carteira financeira — Backend (Plano 1: domínio + ledger)
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Desafio Full Stack PHP — Grupo Adriano Cobuccio. Este é o **Plano 1 de 4**: fundação Laravel,
+camada de domínio e ledger contábil double-entry, sem HTTP/auth/frontend (Planos 2–4).
+Design completo em `docs/superpowers/specs/2026-08-31-carteira-financeira-design.md`.
 
-## About Laravel
+## Requisitos
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+- PHP 8.3+ com extensões `intl`, `pdo_pgsql`, `pcntl` (a última só é usada pela suíte de concorrência)
+- Docker + Docker Compose
+- Composer
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## Setup
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+```bash
+cp .env.example .env
+composer install
+docker compose up -d          # postgres (wallet + wallet_test) + redis
+php artisan key:generate
+php artisan migrate --seed
+```
 
-## Learning Laravel
+`docker compose` expõe Postgres em `localhost:5442` e Redis em `localhost:6389` (portas
+remapeadas para evitar conflito com instâncias locais) — já refletido em `.env` / `.env.testing`.
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
+## Testes
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+```bash
+php artisan test              # unit + integração + concorrência + arquitetura
+./vendor/bin/pint --test      # estilo
+php artisan wallet:reconcile  # invariante contábil (exit 0 = saudável, 1 = drift)
+```
 
-## Laravel Sponsors
+A suíte roda contra Postgres real (`wallet_test`), nunca SQLite — o gatilho de consistência
+contábil (`CONSTRAINT TRIGGER ... DEFERRABLE INITIALLY DEFERRED`) só dispara em commit real, o
+que exige `DatabaseTruncation` (não `RefreshDatabase`) nos grupos `Integration` e `Concurrency`.
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+A suíte `tests/Concurrency` forka processos reais via `pcntl` para validar, sob concorrência de
+verdade: ausência de duplo-gasto, corrida de idempotência, reversão concorrente da mesma
+transação e ausência de deadlock em transferências cruzadas. Sem `pcntl`, esses testes são
+pulados automaticamente.
 
-### Premium Partners
+## Estrutura
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+Domínio em `app/Domain/Wallet/` (enums, Value Object `Money`, models, DTOs, exceptions,
+`LedgerPoster`, Actions, eventos, `BalanceReconciler`). Ver o spec para o racional de cada
+decisão (double-entry, carteira `external_world`, lock pessimista + ordenação determinística,
+idempotência em duas camadas, política de reversão).
 
-## Contributing
-
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
-
-## Code of Conduct
-
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
-
-## Security Vulnerabilities
-
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
-
-## License
-
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+```bash
+make up          # sobe postgres + redis
+make fresh       # migrate:fresh --seed
+make test        # php artisan test
+make pint        # ./vendor/bin/pint
+make reconcile   # php artisan wallet:reconcile
+```
