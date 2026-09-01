@@ -9,6 +9,7 @@ use App\Domain\Wallet\Listeners\PublishUserEvent;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 
@@ -44,5 +45,9 @@ class AppServiceProvider extends ServiceProvider
         Event::listen(FundsDeposited::class, [PublishUserEvent::class, 'handleDeposited']);
         Event::listen(FundsTransferred::class, [PublishUserEvent::class, 'handleTransferred']);
         Event::listen(TransactionReversed::class, [PublishUserEvent::class, 'handleReversed']);
+
+        // OpenAPI docs (/docs/api): open everywhere except production, where an
+        // authenticated user is required. Plan 4 tightens this further.
+        Gate::define('viewApiDocs', fn ($user = null) => ! app()->environment('production') || $user !== null);
     }
 }

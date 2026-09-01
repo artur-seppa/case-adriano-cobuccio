@@ -19,6 +19,12 @@ jobs:
         options: >-
           --health-cmd "pg_isready -U wallet"
           --health-interval 5s --health-timeout 3s --health-retries 10
+      redis:
+        image: redis:7
+        ports: ['6389:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 3s --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: shivammathur/setup-php@v2
@@ -32,3 +38,8 @@ jobs:
       - run: php artisan test
       - run: php artisan db:seed --class=SystemWalletSeeder --env=testing --force
       - run: php artisan wallet:reconcile --env=testing
+      - run: php artisan scramble:export --env=testing --path=openapi.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: openapi
+          path: openapi.json
