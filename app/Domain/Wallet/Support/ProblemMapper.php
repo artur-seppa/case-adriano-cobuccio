@@ -16,6 +16,7 @@ use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Throwable;
 
@@ -62,8 +63,36 @@ final class ProblemMapper
             $e instanceof WalletDomainException => ProblemDetails::response(
                 422, 'domain-error', class_basename($e), $e->getMessage(), method_exists($e, 'context') ? $e->context() : [],
             ),
+            $e instanceof HttpExceptionInterface => self::httpException($e),
             default => self::critical($e, 'internal'),
         };
+    }
+
+    /**
+     * Any `abort($status, ...)` (e.g. the `verified` email gate's 403, a manual
+     * 409) — map to its own status with a status-derived slug, never a 500.
+     */
+    private static function httpException(HttpExceptionInterface $e): JsonResponse
+    {
+        $status = $e->getStatusCode();
+
+        $slug = match ($status) {
+            400 => 'bad-request',
+            403 => 'forbidden',
+            404 => 'not-found',
+            405 => 'method-not-allowed',
+            409 => 'conflict',
+            422 => 'unprocessable-entity',
+            429 => 'rate-limited',
+            default => 'http-error',
+        };
+
+        return ProblemDetails::response(
+            $status,
+            $slug,
+            $status >= 500 ? 'Server error.' : 'Request could not be processed.',
+            $e->getMessage() !== '' ? $e->getMessage() : null,
+        )->withHeaders($e->getHeaders());
     }
 
     private static function critical(Throwable $e, string $slug): JsonResponse
