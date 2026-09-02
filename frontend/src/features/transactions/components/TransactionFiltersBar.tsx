@@ -27,13 +27,14 @@ function selectClass() {
 }
 
 export function TransactionFiltersBar() {
-  const [, setFilters] = useTransactionFilters();
+  const [filters, setFilters] = useTransactionFilters();
 
   return (
     <div className="flex flex-wrap gap-3 p-4">
       <select
         aria-label="Tipo"
         className={selectClass()}
+        value={filters.type ?? ""}
         onChange={(e) => setFilters({ type: (e.target.value || null) as never })}
       >
         {TYPE_OPTIONS.map((opt) => (
@@ -45,6 +46,7 @@ export function TransactionFiltersBar() {
       <select
         aria-label="Direção"
         className={selectClass()}
+        value={filters.direction ?? ""}
         onChange={(e) => setFilters({ direction: (e.target.value || null) as never })}
       >
         {DIRECTION_OPTIONS.map((opt) => (
@@ -56,6 +58,7 @@ export function TransactionFiltersBar() {
       <select
         aria-label="Status"
         className={selectClass()}
+        value={filters.status ?? ""}
         onChange={(e) => setFilters({ status: (e.target.value || null) as never })}
       >
         {STATUS_OPTIONS.map((opt) => (
