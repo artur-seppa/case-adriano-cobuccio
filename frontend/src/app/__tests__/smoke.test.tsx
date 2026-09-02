@@ -6,6 +6,10 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import RootLayout from "../layout";
 
+// RootLayout mounts AuthEventBridge (Task 9), which calls useRouter() — outside
+// Next's app router context that requires mocking, same as other component tests.
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }));
+
 it("renders children inside the html/body shell", () => {
   const html = renderToStaticMarkup(
     <RootLayout>
