@@ -329,3 +329,51 @@ php artisan schedule:work           # roda o agendamento (reconcile 15min, prune
 `pint --test` → `migrate` → `php artisan test` (suíte inteira, incl. concorrência) →
 `wallet:reconcile` sobre dados semeados → `scramble:export` (publica `openapi.json` como
 artefato). Sem gate de cobertura — coverage é gerável localmente com `php artisan test --coverage`.
+
+`.github/workflows/frontend.yml` roda em paralelo: `npm ci` → `lint` → `typecheck` → `vitest` →
+`api:types` com checagem de drift contra o `openapi.json` commitado. Os dois workflows juntos são
+os "2 jobs enxutos" do spec §14 — sem gate de cobertura em nenhum dos dois.
+
+## Frontend
+
+Next.js 15 (App Router), client-first — TypeScript, Tailwind v4, TanStack Query, `nuqs`, MSW+Vitest.
+Vive em `frontend/`, código próprio, não compartilha nada do Vite/Blade legado da raiz (mantido só
+porque o scaffold do Laravel o criou; sem uso desde que a `resources/views/welcome.blade.php` saiu).
+
+### Rodando local
+
+```bash
+# terminal 1 — backend
+php artisan serve   # :8000
+
+# terminal 2 — frontend
+cd frontend
+cp .env.local.example .env.local
+npm install
+npm run dev          # :3000
+```
+
+Abrir `http://localhost:3000`. O `next.config.ts` faz proxy de `/api`, `/sanctum` e `/docs` pro
+backend em `:8000` — é isso que faz o cookie de sessão do Sanctum (`SameSite=Lax`) funcionar sem
+CORS cross-origin em dev; em produção (Plano 4) o Traefik ocupa esse papel e o proxy do Next fica
+inerte (`rewrites()` só roda com `NODE_ENV=development`).
+
+### Tipos da API
+
+```bash
+php artisan scramble:export --path=openapi.json   # na raiz, com o backend presente
+cd frontend && npm run api:types                  # regenera src/shared/api/generated/api.d.ts
+```
+
+Rodar sempre que um endpoint mudar de forma; o CI (`frontend.yml`) falha se os dois saírem de sincronia.
+
+### Testes
+
+```bash
+cd frontend
+npm run test         # Vitest + Testing Library + MSW
+npm run lint
+npm run typecheck
+```
+
+Sem Playwright neste plano — E2E fica pro Plano 4 (infra Docker completa).
