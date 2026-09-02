@@ -4,6 +4,7 @@ import { http, HttpResponse } from "msw";
 import { server } from "@/shared/testing/server";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { createQueryClient } from "@/shared/query/queryClient";
+import { ToastProvider } from "@/shared/ui/Toast";
 import AppLayout from "../layout";
 
 vi.mock("next/navigation", () => ({
@@ -11,8 +12,28 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/",
 }));
 
+// jsdom has no EventSource — the success branch mounts <RealtimeProvider>, which opens one.
+class StubEventSource {
+  onopen: (() => void) | null = null;
+  onerror: (() => void) | null = null;
+  constructor(public url: string) {}
+  addEventListener() {}
+  close() {}
+}
+
+beforeEach(() => {
+  // @ts-expect-error test double
+  global.EventSource = StubEventSource;
+});
+
+// The success branch mounts <RealtimeProvider>, which calls useToast() — mirror the real
+// app tree (root layout.tsx wraps ToastProvider around everything) so that branch renders.
 function renderWithClient(ui: React.ReactElement) {
-  return render(<QueryClientProvider client={createQueryClient()}>{ui}</QueryClientProvider>);
+  return render(
+    <QueryClientProvider client={createQueryClient()}>
+      <ToastProvider>{ui}</ToastProvider>
+    </QueryClientProvider>,
+  );
 }
 
 it("shows a retry state, not an infinite skeleton, when the session check errors (not a 401)", async () => {

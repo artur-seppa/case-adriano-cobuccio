@@ -8,6 +8,8 @@ import { Sidebar } from "@/shared/ui/Sidebar";
 import { Navbar } from "@/shared/ui/Navbar";
 import { Skeleton } from "@/shared/ui/Skeleton";
 import { Button } from "@/shared/ui/Button";
+import { RealtimeProvider } from "@/shared/realtime/realtime-provider";
+import { ConnectionBanner } from "@/shared/realtime/ConnectionBanner";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -37,12 +39,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="min-h-screen bg-canvas">
-      <Sidebar />
-      <Navbar user={session.data} />
-      <main className="ml-60 pt-16">
-        <div className="mx-auto max-w-6xl p-6">{children}</div>
-      </main>
-    </div>
+    <RealtimeProvider>
+      <ConnectionBanner />
+      <div className="min-h-screen bg-canvas">
+        <Sidebar />
+        <Navbar user={session.data} />
+        <main className="ml-60 pt-16">
+          <div className="mx-auto max-w-6xl p-6">{children}</div>
+        </main>
+      </div>
+    </RealtimeProvider>
   );
 }
