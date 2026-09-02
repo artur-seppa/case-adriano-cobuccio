@@ -8,7 +8,9 @@ export function fieldError(error: unknown, field: string): string | undefined {
 
 export function insufficientFundsMessage(error: unknown): string | undefined {
   if (error instanceof ApiError && error.type.endsWith("/insufficient-funds")) {
-    return `Saldo insuficiente (disponível ${formatDecimalBRL(error.extra.available as string)}).`;
+    const available = error.extra.available;
+    if (typeof available !== "string") return "Saldo insuficiente.";
+    return `Saldo insuficiente (disponível ${formatDecimalBRL(available)}).`;
   }
   return undefined;
 }

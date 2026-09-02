@@ -22,6 +22,7 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm run test
+      - run: npm run build
       - run: npm run api:types
       - name: Fail if generated API types drifted from openapi.json
         run: git diff --exit-code -- src/shared/api/generated

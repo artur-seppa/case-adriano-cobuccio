@@ -89,6 +89,17 @@ describe("insufficientFundsMessage", () => {
     expect(insufficientFundsMessage(error)).toBe("Saldo insuficiente (disponível R$ 100,00).");
   });
 
+  it("returns a message without the balance when the insufficient-funds error carries no available amount", () => {
+    const error = new ApiError({
+      status: 422,
+      type: "https://wallet.test/problems/insufficient-funds",
+      title: "Insufficient funds.",
+      extra: { requested: "150.00", currency: "BRL" },
+    });
+
+    expect(insufficientFundsMessage(error)).toBe("Saldo insuficiente.");
+  });
+
   it("returns undefined for any other error", () => {
     const validation = new ApiError({
       status: 422,

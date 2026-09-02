@@ -2,6 +2,7 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { walletKeys } from "@/features/wallet/queryKeys";
 import { apiFetch } from "@/shared/api/client";
 import type { TransactionResource } from "../api/transactions";
 
@@ -26,8 +27,8 @@ export function useReverseTransaction() {
     mutationFn: reverseTransaction,
     onSuccess: (_reversalTransaction, variables) => {
       queryClient.invalidateQueries({ queryKey: ["transactions", "detail", variables.transactionId] });
-      queryClient.invalidateQueries({ queryKey: ["wallet"] });
-      queryClient.invalidateQueries({ queryKey: ["transactions", "list"] });
+      queryClient.invalidateQueries({ queryKey: walletKeys.all });
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
     },
   });
 }
