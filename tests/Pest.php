@@ -15,8 +15,14 @@ use Tests\TestCase;
 |
 */
 
+// Feature/HTTP tests hit endpoints whose Actions use DB::transaction(..., attempts: 3)
+// + DB::afterCommit() for domain events, and the deferred balance trigger fires only
+// at COMMIT. RefreshDatabase's never-committed wrapping transaction would mute both,
+// so the Feature group uses DatabaseTruncation like Integration/Concurrency and seeds
+// the external_world system wallet before each test.
 pest()->extend(TestCase::class)
- // ->use(Illuminate\Foundation\Testing\RefreshDatabase::class)
+    ->use(DatabaseTruncation::class)
+    ->beforeEach(fn () => SystemWallets::externalWorld())
     ->in('Feature');
 
 // Integration tests run against the real migrated Postgres `wallet_test` DB.

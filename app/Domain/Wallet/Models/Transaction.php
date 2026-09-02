@@ -82,6 +82,12 @@ class Transaction extends Model
 
     public function isReversed(): bool
     {
+        // Prefer the eager-loaded relation (avoids an N+1 when rendering lists);
+        // fall back to an existence query when it was not loaded.
+        if ($this->relationLoaded('reversalTransaction')) {
+            return $this->reversalTransaction !== null;
+        }
+
         return $this->reversalTransaction()->exists();
     }
 }
