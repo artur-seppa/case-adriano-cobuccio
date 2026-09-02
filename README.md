@@ -65,8 +65,12 @@ docker compose up -d        # postgres (wallet + wallet_test) + redis + mailpit
 php artisan key:generate
 php artisan migrate --seed   # tabelas + carteira external_world (+ dados de demo em local)
 
-php artisan serve            # sobe a API em http://localhost:8000
+PHP_CLI_SERVER_WORKERS=10 php artisan serve --no-reload   # API em http://localhost:8000
 ```
+
+> Multi-worker é obrigatório se o frontend for usado junto: a conexão SSE sempre-aberta
+> (`GET /api/v1/stream`) prende o único worker do `php artisan serve` padrão e trava todo o resto.
+> Só a API, via `curl`/testes, `php artisan serve` sozinho basta.
 
 Com a API no ar: contrato em `http://localhost:8000/docs/api`, e um cron/worker de
 agendamento com `php artisan schedule:work` (reconcile a cada 15 min, prune de hora em hora).
@@ -343,8 +347,8 @@ porque o scaffold do Laravel o criou; sem uso desde que a `resources/views/welco
 ### Rodando local
 
 ```bash
-# terminal 1 — backend
-php artisan serve   # :8000
+# terminal 1 — backend (múltiplos workers: obrigatório)
+PHP_CLI_SERVER_WORKERS=10 php artisan serve --no-reload   # :8000
 
 # terminal 2 — frontend
 cd frontend
@@ -352,6 +356,13 @@ cp .env.local.example .env.local
 npm install
 npm run dev          # :3000
 ```
+
+> **`php artisan serve` sozinho trava o app.** O servidor embutido do PHP é single-process;
+> assim que uma sessão autenticada abre, o `RealtimeProvider` do frontend mantém uma conexão
+> SSE (`GET /api/v1/stream`) aberta o tempo todo, e essa conexão longa ocupa o único worker —
+> toda outra request (extrato, detalhe, depósito…) fica presa até dar timeout / 500.
+> `PHP_CLI_SERVER_WORKERS=10 --no-reload` forka workers e resolve. Em produção (Plano 4) o
+> runtime é FrankenPHP/Octane, que já é multi-worker por natureza.
 
 Abrir `http://localhost:3000`. O `next.config.ts` faz proxy de `/api`, `/sanctum` e `/docs` pro
 backend em `:8000` — é isso que faz o cookie de sessão do Sanctum (`SameSite=Lax`) funcionar sem
