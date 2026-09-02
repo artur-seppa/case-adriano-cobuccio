@@ -157,18 +157,25 @@ atrás do gate `viewApiDocs`.
 
 ## Observabilidade
 
-O que já existe no código (dashboards de Pulse/Horizon e `/metrics` Prometheus entram junto
-com o empacotamento Docker):
+### Disponível agora (como verificar)
 
-| Recurso | |
+| Recurso | Como checar |
 |---|---|
-| `GET /up` | health check do Laravel (sem auth) |
-| `X-Request-Id` | toda resposta carrega um id de correlação (aceita o do cliente ou gera); volta também no corpo de erro (`request_id`) e é injetado no `Context` do log |
+| Health check | `curl -i http://localhost:8000/up` → `200` (sem auth) |
+| Índice de serviço | `curl http://localhost:8000/` → JSON com links de `docs`, `openapi`, `health` |
+| `X-Request-Id` | `curl -i http://localhost:8000/up \| grep -i x-request-id` — toda resposta carrega o id de correlação (aceita o do cliente ou gera); volta no corpo de erro como `request_id` e entra no `Context` do log |
 | Erros `problem+json` | bugs/invariantes violadas (`UnbalancedLedgerException`, exceção inesperada) → `500` genérico + `Log::critical` com contexto e `request_id`; nunca vazam detalhe interno |
-| `php artisan wallet:reconcile` | tripwire da invariante contábil — exit ≠ 0 e `Log::critical` em drift; roda a cada 15 min pelo scheduler e no CI sobre dados semeados |
-| `php artisan idempotency:prune` | remove `idempotency_keys` expiradas; agendado de hora em hora |
+| Logs ao vivo | `php artisan pail` (já incluso — `laravel/pail`) |
+| Invariante contábil | `php artisan wallet:reconcile` — exit ≠ 0 e `Log::critical` em drift; roda a cada 15 min pelo scheduler e no CI sobre dados semeados |
+| Limpeza de idempotência | `php artisan idempotency:prune` — remove `idempotency_keys` expiradas; agendado de hora em hora |
 
 Agendamento em `routes/console.php`; precisa de um `schedule:work` (ou cron) rodando.
+
+### Ainda não no repositório (Plano 4 — empacotamento Docker)
+
+Dashboards de **Pulse/Horizon** e endpoint **`/metrics` Prometheus** entram junto com a infra
+Docker de produção. Não há `/horizon`, `/pulse` nem `/metrics` neste checkout — as libs não
+estão no `composer.json` e não há rota registrada (`php artisan route:list` confirma).
 
 ---
 
