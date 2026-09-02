@@ -6,6 +6,9 @@ export function fieldError(error: unknown, field: string): string | undefined {
 }
 
 export function genericErrorMessage(error: unknown): string | undefined {
-  if (error instanceof ApiError && !error.errors) return error.detail ?? error.title;
+  if (error instanceof ApiError) {
+    return error.errors ? undefined : (error.detail ?? error.title);
+  }
+  if (error) return "Erro de rede. Verifique sua conexão e tente novamente.";
   return undefined;
 }

@@ -4,7 +4,7 @@ import { FormEvent, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Input } from "@/shared/ui/Input";
 import { Button } from "@/shared/ui/Button";
-import { genericErrorMessage } from "@/shared/api/fieldError";
+import { fieldError, genericErrorMessage } from "@/shared/api/fieldError";
 import { useResetPassword } from "../hooks/useResetPassword";
 
 export function ResetPasswordForm() {
@@ -29,12 +29,18 @@ export function ResetPasswordForm() {
     <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
       <h1 className="text-xl font-semibold text-ink-900">Redefinir senha</h1>
       <p className="text-sm text-ink-500">{email}</p>
+      {fieldError(resetPassword.error, "email") && (
+        <p role="alert" className="text-sm text-danger-500">
+          {fieldError(resetPassword.error, "email")}
+        </p>
+      )}
       <Input
         label="Nova senha"
         type="password"
         required
         value={password}
         onChange={(e) => setPassword(e.target.value)}
+        error={fieldError(resetPassword.error, "password")}
       />
       <Input
         label="Confirmar nova senha"
