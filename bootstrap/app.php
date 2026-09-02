@@ -25,6 +25,12 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->statefulApi(); // Sanctum: EnsureFrontendRequestsAreStateful on the 'api' group
 
+        // Headless API: there is no `login` route, so a guest hitting a
+        // protected route must never trigger `route('login')` in the auth
+        // middleware (it throws RouteNotFoundException → 500). Returning null
+        // lets the exception handler answer with a JSON 401.
+        $middleware->redirectGuestsTo(fn () => null);
+
         // Global: every HTTP response (health check + error responses included)
         // must carry X-Request-Id. The `/up` health route has no middleware
         // group in Laravel 12, so group-scoped wiring would miss it.
