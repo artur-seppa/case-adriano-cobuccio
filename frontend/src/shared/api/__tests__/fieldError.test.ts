@@ -1,5 +1,5 @@
 import { ApiError } from "../problem";
-import { fieldError, genericErrorMessage } from "../fieldError";
+import { fieldError, genericErrorMessage, insufficientFundsMessage } from "../fieldError";
 
 describe("fieldError", () => {
   it("returns the first message for a field present in a validation error", () => {
@@ -63,5 +63,41 @@ describe("genericErrorMessage", () => {
   it("returns undefined when there is no error", () => {
     expect(genericErrorMessage(null)).toBeUndefined();
     expect(genericErrorMessage(undefined)).toBeUndefined();
+  });
+
+  it("returns undefined for an insufficient-funds error (shown inline instead, via insufficientFundsMessage)", () => {
+    const error = new ApiError({
+      status: 422,
+      type: "https://wallet.test/problems/insufficient-funds",
+      title: "Insufficient funds.",
+      extra: { available: "100.00", requested: "150.00", currency: "BRL" },
+    });
+
+    expect(genericErrorMessage(error)).toBeUndefined();
+  });
+});
+
+describe("insufficientFundsMessage", () => {
+  it("formats a ready-to-show message with the available balance for an insufficient-funds error", () => {
+    const error = new ApiError({
+      status: 422,
+      type: "https://wallet.test/problems/insufficient-funds",
+      title: "Insufficient funds.",
+      extra: { available: "100.00", requested: "150.00", currency: "BRL" },
+    });
+
+    expect(insufficientFundsMessage(error)).toBe("Saldo insuficiente (disponível R$ 100,00).");
+  });
+
+  it("returns undefined for any other error", () => {
+    const validation = new ApiError({
+      status: 422,
+      type: "https://wallet.test/problems/validation-failed",
+      title: "x",
+      errors: { amount: ["bad"] },
+    });
+    expect(insufficientFundsMessage(validation)).toBeUndefined();
+    expect(insufficientFundsMessage(new TypeError("Failed to fetch"))).toBeUndefined();
+    expect(insufficientFundsMessage(null)).toBeUndefined();
   });
 });

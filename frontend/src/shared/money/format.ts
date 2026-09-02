@@ -12,3 +12,18 @@ const BRL_FORMATTER = new Intl.NumberFormat("pt-BR", { style: "currency", curren
 export function formatCentsBRL(cents: number): string {
   return BRL_FORMATTER.format(cents / 100);
 }
+
+/**
+ * Formats a decimal string that already came from the server (e.g. the
+ * `available` field of an `insufficient-funds` error) for display. Never
+ * uses `Number()`/`parseFloat` — pure string manipulation, same spirit as
+ * `centsToDecimalString`: the value never becomes a float anywhere along
+ * the way.
+ */
+export function formatDecimalBRL(decimal: string): string {
+  const negative = decimal.startsWith("-");
+  const unsigned = negative ? decimal.slice(1) : decimal;
+  const [reais, centavos = "00"] = unsigned.split(".");
+  const withThousands = reais.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  return `${negative ? "-" : ""}R$ ${withThousands},${centavos}`;
+}
