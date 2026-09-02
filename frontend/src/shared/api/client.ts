@@ -5,7 +5,7 @@ const BASE = process.env.NEXT_PUBLIC_API_BASE ?? "/api/v1";
 
 type ApiInit = RequestInit & { idempotencyKey?: string };
 
-async function request<T>(path: string, init: ApiInit, isRetry = false): Promise<T> {
+async function requestRaw<T>(fullPath: string, init: ApiInit, isRetry = false): Promise<T> {
   const headers = new Headers(init.headers);
   headers.set("Accept", "application/json");
 
@@ -21,15 +21,11 @@ async function request<T>(path: string, init: ApiInit, isRetry = false): Promise
     headers.set("Idempotency-Key", init.idempotencyKey);
   }
 
-  const response = await fetch(`${BASE}${path}`, {
-    ...init,
-    headers,
-    credentials: "include",
-  });
+  const response = await fetch(fullPath, { ...init, headers, credentials: "include" });
 
   if (response.status === 419 && !isRetry) {
     await ensureCsrf();
-    return request<T>(path, init, true);
+    return requestRaw<T>(fullPath, init, true);
   }
 
   if (!response.ok) {
@@ -47,8 +43,12 @@ async function request<T>(path: string, init: ApiInit, isRetry = false): Promise
   return (await response.json()) as T;
 }
 
+export function apiRequest<T>(fullPath: string, init: ApiInit = {}): Promise<T> {
+  return requestRaw<T>(fullPath, init);
+}
+
 export function apiFetch<T>(path: string, init: ApiInit = {}): Promise<T> {
-  return request<T>(path, init);
+  return requestRaw<T>(`${BASE}${path}`, init);
 }
 
 export { ApiError };
