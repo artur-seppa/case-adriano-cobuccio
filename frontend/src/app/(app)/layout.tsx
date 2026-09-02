@@ -7,6 +7,7 @@ import { useSession } from "@/features/auth/hooks/useSession";
 import { Sidebar } from "@/shared/ui/Sidebar";
 import { Navbar } from "@/shared/ui/Navbar";
 import { Skeleton } from "@/shared/ui/Skeleton";
+import { Button } from "@/shared/ui/Button";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -17,6 +18,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       router.replace("/login");
     }
   }, [session.isSuccess, session.data, router]);
+
+  if (session.isError) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-canvas">
+        <p className="text-sm text-danger-500">Não foi possível verificar sua sessão.</p>
+        <Button onClick={() => session.refetch()}>Tentar de novo</Button>
+      </div>
+    );
+  }
 
   if (session.isLoading || !session.data) {
     return (
