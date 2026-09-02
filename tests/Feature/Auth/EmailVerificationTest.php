@@ -13,9 +13,25 @@ it('verifies email via the signed link', function () {
         'hash' => sha1($user->email),
     ]);
 
-    $this->actingAs($user)->getJson($url)->assertNoContent();
+    $this->actingAs($user)->getJson($url)
+        ->assertOk()
+        ->assertJsonPath('verified', true);
 
     expect($user->fresh()->hasVerifiedEmail())->toBeTrue();
+});
+
+it('returns a browser-friendly confirmation page when the link is opened directly', function () {
+    $user = User::factory()->unverified()->create();
+
+    $url = URL::temporarySignedRoute('verification.verify', now()->addMinutes(60), [
+        'id' => $user->id,
+        'hash' => sha1($user->email),
+    ]);
+
+    $this->actingAs($user)->get($url)
+        ->assertOk()
+        ->assertHeader('Content-Type', 'text/html; charset=UTF-8')
+        ->assertSee('E-mail verificado');
 });
 
 it('rejects a tampered verification hash', function () {

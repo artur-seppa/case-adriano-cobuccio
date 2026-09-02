@@ -37,3 +37,21 @@ it('rejects a forgot-password request for an unknown email (Fortify default)', f
 
     Notification::assertNothingSent();
 });
+
+it('actually builds and sends the reset notification without a 500', function () {
+    // No Notification::fake() here on purpose: faking short-circuits the URL
+    // build, which is exactly where the `route(password.reset)` 500 lived.
+    $user = User::factory()->create();
+
+    $this->postJson('/api/forgot-password', ['email' => $user->email])->assertOk();
+});
+
+it('points the reset link at the SPA frontend, not a backend view route', function () {
+    config(['app.frontend_url' => 'https://app.example']);
+    $user = User::factory()->create(['email' => 'x@wallet.test']);
+
+    $mail = (new ResetPassword('tok-123'))->toMail($user);
+
+    expect($mail->actionUrl)
+        ->toBe('https://app.example/reset-password?token=tok-123&email=x%40wallet.test');
+});
