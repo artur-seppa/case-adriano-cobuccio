@@ -41,7 +41,17 @@ export async function parseProblem(response: Response): Promise<ApiError> {
     });
   }
 
-  const body = (await response.json()) as Record<string, unknown>;
+  let body: Record<string, unknown>;
+  try {
+    body = (await response.json()) as Record<string, unknown>;
+  } catch {
+    return new ApiError({
+      status: response.status,
+      type: "about:blank",
+      title: response.statusText || "Request failed",
+    });
+  }
+
   const extra: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(body)) {
     if (!KNOWN_KEYS.has(key)) extra[key] = value;

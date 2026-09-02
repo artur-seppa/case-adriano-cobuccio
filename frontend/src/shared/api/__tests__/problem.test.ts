@@ -29,3 +29,13 @@ it("falls back to a generic ApiError when the body isn't problem+json", async ()
   expect(err.status).toBe(500);
   expect(err.type).toBe("about:blank");
 });
+
+it("falls back to a generic ApiError when the problem+json body is malformed", async () => {
+  const res = new Response("not json", {
+    status: 500,
+    headers: { "Content-Type": "application/problem+json" },
+  });
+  const err = await parseProblem(res);
+  expect(err.status).toBe(500);
+  expect(err.type).toBe("about:blank");
+});
