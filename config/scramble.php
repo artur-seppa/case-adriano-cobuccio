@@ -50,11 +50,11 @@ return [
         /*
          * Description rendered on the home page of the API documentation (`/docs/api`).
          */
-        'description' => 'Carteira financeira — API v1. Auth por sessão (Sanctum cookie). Erros RFC 9457 (application/problem+json). Escritas de dinheiro exigem o header Idempotency-Key.',
+        'description' => 'Carteira financeira (API v1). Auth por sessão (Sanctum cookie). Erros RFC 9457 (application/problem+json). Escritas de dinheiro exigem o header Idempotency-Key.',
     ],
 
     'ui' => [
-        'title' => 'Carteira financeira — API',
+        'title' => 'Carteira financeira (API)',
     ],
 
     /*

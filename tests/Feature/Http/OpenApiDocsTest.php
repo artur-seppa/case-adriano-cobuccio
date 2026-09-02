@@ -36,6 +36,26 @@ it('carries concrete request examples and the Idempotency-Key header', function 
         ->and($header['example'])->not->toBeEmpty();
 });
 
+it('documents the Fortify auth request bodies with examples', function () {
+    $doc = $this->getJson('/docs/api.json')->assertOk()->json();
+
+    $register = $doc['paths']['/register']['post']['requestBody']['content']['application/json']['schema'];
+    expect($register['required'])->toContain('name', 'email', 'password', 'password_confirmation')
+        ->and($register['properties']['email']['examples'])->toBe(['alice@wallet.test'])
+        ->and($register['properties']['password']['examples'])->toBe(['Password1234']);
+
+    $login = $doc['paths']['/login']['post']['requestBody']['content']['application/json']['schema'];
+    if (isset($login['$ref'])) {
+        $login = $doc['components']['schemas'][basename($login['$ref'])];
+    }
+    expect($login['properties']['email']['examples'])->toBe(['alice@wallet.test']);
+
+    // logged-in self-service (PUT) — Fortify validates inside the action, so
+    // these bodies are hand-declared too.
+    $pwd = $doc['paths']['/user/password']['put']['requestBody']['content']['application/json']['schema'];
+    expect($pwd['required'])->toBe(['current_password', 'password', 'password_confirmation']);
+});
+
 it('groups endpoints into ordered sections', function () {
     $doc = $this->getJson('/docs/api.json')->assertOk()->json();
 

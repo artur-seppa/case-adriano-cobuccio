@@ -6,9 +6,17 @@ use App\Domain\Wallet\Events\FundsDeposited;
 use App\Domain\Wallet\Events\FundsTransferred;
 use App\Domain\Wallet\Events\TransactionReversed;
 use App\Domain\Wallet\Listeners\PublishUserEvent;
+use Closure;
 use Dedoc\Scramble\Scramble;
 use Dedoc\Scramble\Support\Generator\OpenApi;
+use Dedoc\Scramble\Support\Generator\Operation;
+use Dedoc\Scramble\Support\Generator\RequestBodyObject;
+use Dedoc\Scramble\Support\Generator\Response;
+use Dedoc\Scramble\Support\Generator\Schema;
 use Dedoc\Scramble\Support\Generator\Tag;
+use Dedoc\Scramble\Support\Generator\Types\BooleanType;
+use Dedoc\Scramble\Support\Generator\Types\ObjectType;
+use Dedoc\Scramble\Support\Generator\Types\StringType;
 use Dedoc\Scramble\Support\RouteInfo;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
@@ -108,14 +116,120 @@ class AppServiceProvider extends ServiceProvider
             }];
         });
 
-        // Declare the sections (name + description) in a deliberate order; runs
-        // after Scramble's own AddDocumentTags, so this ordering wins.
-        Scramble::configure()->withDocumentTransformers(function (OpenApi $openApi) use ($sections) {
-            $openApi->tags = array_map(
-                fn (string $name, string $description) => new Tag($name, $description),
-                array_keys($sections),
-                array_values($sections),
-            );
+        // Registered after Scramble's own extensions (which run during its
+        // bootingPackage) so these transformers get the last word.
+        $this->app->booted(function () use ($sections) {
+            Scramble::configure()
+                // Declare the sections (name + description) in a deliberate order.
+                ->withDocumentTransformers(function (OpenApi $openApi) use ($sections) {
+                    $openApi->tags = array_map(
+                        fn (string $name, string $description) => new Tag($name, $description),
+                        array_keys($sections),
+                        array_values($sections),
+                    );
+                })
+                // Fortify's auth endpoints validate inside actions/closures, so
+                // Scramble can't infer their bodies — declare them by hand with
+                // real example values.
+                ->withOperationTransformers($this->authRequestBodyDocs());
         });
+    }
+
+    /**
+     * @return Closure(Operation, RouteInfo): void
+     */
+    private function authRequestBodyDocs(): Closure
+    {
+        $bodies = [
+            'api/login' => [
+                'required' => ['email', 'password'],
+                'fields' => [
+                    'email' => ['string', 'email', 'alice@wallet.test'],
+                    'password' => ['string', 'password', 'Password1234'],
+                    // `remember` is optional — persistent "remember me" cookie.
+                    'remember' => ['bool', null, true],
+                ],
+                'success' => [204, 'Session started (Set-Cookie).'],
+            ],
+            'api/register' => [
+                'required' => ['name', 'email', 'password', 'password_confirmation'],
+                'fields' => [
+                    'name' => ['string', null, 'Alice Souza'],
+                    'email' => ['string', 'email', 'alice@wallet.test'],
+                    'password' => ['string', 'password', 'Password1234'],
+                    'password_confirmation' => ['string', 'password', 'Password1234'],
+                ],
+                'success' => [201, 'User + wallet created; body: { user, requires_email_verification }.'],
+            ],
+            'api/forgot-password' => [
+                'required' => ['email'],
+                'fields' => [
+                    'email' => ['string', 'email', 'alice@wallet.test'],
+                ],
+                'success' => [200, 'Reset link e-mailed; body: { message }.'],
+            ],
+            'api/reset-password' => [
+                'required' => ['token', 'email', 'password', 'password_confirmation'],
+                'fields' => [
+                    'token' => ['string', null, '8b1f0c2d3e4a5b6c7d8e9f0a1b2c3d4e'],
+                    'email' => ['string', 'email', 'alice@wallet.test'],
+                    'password' => ['string', 'password', 'NovaSenha1234'],
+                    'password_confirmation' => ['string', 'password', 'NovaSenha1234'],
+                ],
+                'success' => [204, 'Password changed.'],
+            ],
+            // Logged-in self-service (PUT). Fortify validates inside the actions,
+            // so Scramble sees no body here either.
+            'api/user/password' => [
+                'required' => ['current_password', 'password', 'password_confirmation'],
+                'fields' => [
+                    'current_password' => ['string', 'password', 'Password1234'],
+                    'password' => ['string', 'password', 'NovaSenha1234'],
+                    'password_confirmation' => ['string', 'password', 'NovaSenha1234'],
+                ],
+                'success' => [204, 'Password changed.'],
+            ],
+            'api/user/profile-information' => [
+                'required' => ['name', 'email'],
+                'fields' => [
+                    'name' => ['string', null, 'Alice Souza'],
+                    'email' => ['string', 'email', 'alice@wallet.test'],
+                ],
+                'success' => [204, 'Profile updated (changing the e-mail resets verification).'],
+            ],
+        ];
+
+        return function (Operation $operation, RouteInfo $routeInfo) use ($bodies) {
+            $spec = $bodies[$routeInfo->route->uri()] ?? null;
+
+            if ($spec === null) {
+                return;
+            }
+
+            $object = new ObjectType;
+            foreach ($spec['fields'] as $name => [$kind, $format, $example]) {
+                $type = $kind === 'bool' ? new BooleanType : new StringType;
+                if ($format !== null) {
+                    $type->format($format);
+                }
+                $object->addProperty($name, $type->example($example));
+            }
+            $object->setRequired($spec['required']);
+
+            $operation->addRequestBodyObject(
+                RequestBodyObject::make()
+                    ->required()
+                    ->setContent('application/json', Schema::fromType($object)),
+            );
+
+            // Scramble can't infer Fortify's response — replace its guessed 200
+            // with the real success code + a 422 (all four routes validate).
+            [$code, $description] = $spec['success'];
+            $operation->responses = [];
+            $operation->addResponse(Response::make($code)->description($description));
+            $operation->addResponse(
+                Response::make(422)->description('Validation failed (application/problem+json).'),
+            );
+        };
     }
 }
