@@ -219,6 +219,12 @@ return [
             'maxJobs' => 0,
             'memory' => 128,
             'tries' => 1,
+            // Space out retries of a failed job (e.g. a transient SMTP 4xx —
+            // greylisting, rate limit) instead of burning the attempts back to
+            // back. Inherited by every environment below; `tries => 3` there
+            // uses the first two steps. SendQueuedNotifications does not forward
+            // a notification-level backoff(), so it has to live here.
+            'backoff' => [60, 300, 900],
             'timeout' => 60,
             'nice' => 0,
         ],
