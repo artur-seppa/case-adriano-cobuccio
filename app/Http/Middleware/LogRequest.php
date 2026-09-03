@@ -28,11 +28,15 @@ class LogRequest
             'ip' => $request->ip(),
         ]);
 
+        // The route *pattern* (`api/v1/transactions/{transaction}/reversal`),
+        // never the resolved path — unbounded, request-controlled label
+        // values (ULIDs, or any garbage path a client sends) would otherwise
+        // create a permanent, ever-growing set of histogram series in Redis.
         Metrics::histogram(
             'http_server_request_duration_seconds', 'HTTP server request duration, in seconds.',
             $durationSeconds,
             ['method', 'route', 'status'],
-            [$request->getMethod(), $request->route()?->getName() ?? $request->path(), (string) $response->getStatusCode()],
+            [$request->getMethod(), $request->route()?->uri() ?? 'unmatched', (string) $response->getStatusCode()],
             [0.05, 0.1, 0.25, 0.5, 1, 2.5, 5],
         );
 

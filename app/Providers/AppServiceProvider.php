@@ -29,7 +29,7 @@ use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
-use Laravel\Telescope\TelescopeServiceProvider;
+use Laravel\Telescope\TelescopeServiceProvider as LaravelTelescopeServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -53,9 +53,9 @@ class AppServiceProvider extends ServiceProvider
         // Telescope is dev-only and never auto-discovered (see composer.json
         // `dont-discover`) — register it (and its gate provider) manually,
         // and only outside production, so it never boots there by accident.
-        if ($this->app->environment('local') && class_exists(TelescopeServiceProvider::class)) {
+        if ($this->app->environment('local') && class_exists(LaravelTelescopeServiceProvider::class)) {
+            $this->app->register(LaravelTelescopeServiceProvider::class);
             $this->app->register(TelescopeServiceProvider::class);
-            $this->app->register(\App\Providers\TelescopeServiceProvider::class);
         }
     }
 

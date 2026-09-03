@@ -18,7 +18,6 @@ class AssignRequestId
         $id = preg_match(self::PATTERN, $incoming) === 1 ? $incoming : (string) Str::uuid();
 
         $request->attributes->set('request_id', $id);
-        app()->instance('request_id', $id);
 
         Context::add('request_id', $id);
         Context::add('ip', $request->ip());

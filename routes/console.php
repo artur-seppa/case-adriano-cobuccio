@@ -11,3 +11,4 @@ Artisan::command('inspire', function () {
 Schedule::command('idempotency:prune')->hourly();
 Schedule::command('wallet:reconcile')->everyFifteenMinutes();
 Schedule::command('pulse:check')->everyMinute();
+Schedule::command('horizon:snapshot')->everyFiveMinutes();

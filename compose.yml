@@ -20,7 +20,12 @@ services:
     image: nginx:alpine
     volumes:
       - ./docker/nginx.conf:/etc/nginx/conf.d/default.conf:ro
-    ports: ["80:80"]
+    # Bound to localhost: in APP_ENV=local, viewHorizon/viewPulse/viewTelescope
+    # all return true for a guest, and Horizon shows queued mail payloads
+    # (password-reset tokens, emails) — not something to expose to the LAN by
+    # default on a financial-app demo. Drop the `127.0.0.1:` prefix to share
+    # over the network on purpose.
+    ports: ["127.0.0.1:80:80"]
     depends_on:
       app:
         condition: service_healthy
@@ -105,7 +110,7 @@ services:
     # Published so `php artisan test` (.env.testing -> 127.0.0.1:5442) works
     # from the host against this stack's `wallet_test` DB — not just the
     # app/web HTTP path proxied through :80.
-    ports: ["5442:5432"]
+    ports: ["127.0.0.1:5442:5432"]
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
@@ -121,7 +126,7 @@ services:
     command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"]
     # Published so `php artisan test` (.env.testing -> 127.0.0.1:6389) works
     # from the host against this stack's Redis, matching the postgres port above.
-    ports: ["6389:6379"]
+    ports: ["127.0.0.1:6389:6379"]
     volumes:
       - redisdata:/data
     healthcheck:
@@ -133,7 +138,7 @@ services:
 
   mailpit:
     image: axllent/mailpit:latest
-    ports: ["8025:8025"]
+    ports: ["127.0.0.1:8025:8025"]
     healthcheck:
       test: ["CMD", "/mailpit", "readyz"]
       interval: 5s
