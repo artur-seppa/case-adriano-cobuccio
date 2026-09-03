@@ -86,6 +86,10 @@ services:
       POSTGRES_USER: wallet
       POSTGRES_PASSWORD: wallet
       POSTGRES_DB: wallet
+    # Published so `php artisan test` (.env.testing -> 127.0.0.1:5442) works
+    # from the host against this stack's `wallet_test` DB — not just the
+    # app/web HTTP path proxied through :80.
+    ports: ["5442:5432"]
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
@@ -99,6 +103,9 @@ services:
   redis:
     image: redis:7
     command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"]
+    # Published so `php artisan test` (.env.testing -> 127.0.0.1:6389) works
+    # from the host against this stack's Redis, matching the postgres port above.
+    ports: ["6389:6379"]
     volumes:
       - redisdata:/data
     healthcheck:
