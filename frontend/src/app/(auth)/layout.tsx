@@ -1,7 +1,31 @@
+"use client";
+
+import { useEffect } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { Card } from "@/shared/ui/Card";
 import { Wordmark } from "@/shared/ui/Wordmark";
+import { useSession } from "@/features/auth/hooks/useSession";
+
+// Only these redirect an already-authenticated visitor back to "/" — visiting
+// /reset-password or /verify-email while logged in (e.g. from a stale email
+// link, or re-verifying after a session already exists) is a legitimate flow.
+const REDIRECT_IF_AUTHENTICATED_PATHS = ["/login", "/register", "/forgot-password"];
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const session = useSession();
+
+  const shouldRedirectIfAuthenticated = REDIRECT_IF_AUTHENTICATED_PATHS.some((path) =>
+    pathname.startsWith(path),
+  );
+
+  useEffect(() => {
+    if (shouldRedirectIfAuthenticated && session.isSuccess && session.data !== null) {
+      router.replace("/");
+    }
+  }, [shouldRedirectIfAuthenticated, session.isSuccess, session.data, router]);
+
   return (
     <div
       className="flex min-h-screen flex-col items-center justify-center gap-6 px-4 py-12"
