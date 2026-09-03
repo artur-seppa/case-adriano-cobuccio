@@ -6,6 +6,7 @@ import { Input } from "@/shared/ui/Input";
 import { MoneyInput } from "@/shared/money/MoneyInput";
 import { useToast } from "@/shared/ui/Toast";
 import { useIdempotencyKey } from "@/shared/api/useIdempotencyKey";
+import { ApiError } from "@/shared/api/problem";
 import { fieldError, genericErrorMessage, insufficientFundsMessage } from "@/shared/api/fieldError";
 import { useWallet } from "@/features/wallet/hooks/useWallet";
 import { useTransfer } from "../hooks/useTransfer";
@@ -28,6 +29,13 @@ export function TransferForm({ onSuccess }: { onSuccess?: () => void }) {
           idempotencyKey.reset();
           toast({ title: "Transferência enviada.", variant: "success" });
           onSuccess?.();
+        },
+        onError: (error) => {
+          // The server returned a verdict (any HTTP status) — the next click is
+          // a new logical request, so it needs its own key. Only a transport
+          // failure (no response) keeps the key, so re-submitting still de-dupes
+          // a write that may have landed.
+          if (error instanceof ApiError) idempotencyKey.reset();
         },
       },
     );

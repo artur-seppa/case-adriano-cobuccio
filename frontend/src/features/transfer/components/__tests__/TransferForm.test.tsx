@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { server } from "@/shared/testing/server";
@@ -98,4 +98,37 @@ it("shows a recipient-not-found error on the recipient field", async () => {
   await user.click(screen.getByRole("button", { name: "Transferir" }));
 
   expect(await screen.findByText("No wallet was found for this recipient.")).toBeInTheDocument();
+});
+
+it("sends a fresh Idempotency-Key after a rejected attempt, so the retry isn't replayed", async () => {
+  const keys: string[] = [];
+  server.use(
+    http.post("/api/v1/transfers", ({ request }) => {
+      keys.push(request.headers.get("Idempotency-Key") ?? "");
+      return HttpResponse.json(
+        {
+          type: "https://wallet.test/problems/validation-failed",
+          title: "The given data was invalid.",
+          status: 422,
+          errors: { recipient: ["No user matches that email or id."] },
+        },
+        { status: 422, headers: { "Content-Type": "application/problem+json" } },
+      );
+    }),
+  );
+
+  const user = userEvent.setup();
+  renderForm();
+
+  await user.type(screen.getByLabelText("Destinatário (e-mail)"), "ghost@example.test");
+  await user.type(screen.getByLabelText("Valor"), "5000");
+
+  await user.click(screen.getByRole("button", { name: "Transferir" }));
+  expect(await screen.findByText("No user matches that email or id.")).toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "Transferir" }));
+  await waitFor(() => expect(keys).toHaveLength(2));
+
+  expect(keys[0]).toMatch(/^[0-9a-f-]{36}$/);
+  expect(keys[1]).not.toBe(keys[0]);
 });
