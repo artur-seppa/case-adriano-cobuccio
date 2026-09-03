@@ -6,6 +6,7 @@ use App\Domain\Wallet\Events\FundsDeposited;
 use App\Domain\Wallet\Events\FundsTransferred;
 use App\Domain\Wallet\Events\TransactionReversed;
 use App\Domain\Wallet\Models\Transaction;
+use App\Support\Metrics;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -29,9 +30,13 @@ class LogBusinessEvent
 
     public function handleReversed(TransactionReversed $event): void
     {
+        $reason = $event->reversal->reversal_reason?->value;
+
         $this->log('transaction.reversed', $event->reversal, [
-            'reason' => $event->reversal->reversal_reason?->value,
+            'reason' => $reason,
         ]);
+
+        Metrics::counter('reversals_total', 'Reversals by reason.', ['reason'], [$reason ?? 'unspecified']);
     }
 
     private function log(string $event, Transaction $transaction, array $extra = []): void
@@ -42,5 +47,18 @@ class LogBusinessEvent
             'amount_cents' => $transaction->amount_cents,
             'currency' => $transaction->currency,
         ], $extra));
+
+        // Every logged transaction is, by construction, a completed one: this
+        // domain never persists a partial/failed transaction row (Plan 1's
+        // ledger design is all-or-nothing per Action).
+        Metrics::counter(
+            'transactions_total', 'Wallet transactions by type and status.',
+            ['type', 'status'], [$transaction->type->value, 'completed'],
+        );
+        Metrics::histogram(
+            'transaction_amount_cents', 'Transaction amount distribution, in cents.',
+            (float) $transaction->amount_cents, ['type'], [$transaction->type->value],
+            [100, 1000, 10000, 100000, 1000000],
+        );
     }
 }

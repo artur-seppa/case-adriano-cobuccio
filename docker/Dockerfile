@@ -1,13 +1,18 @@
 # syntax=docker/dockerfile:1
 
-# ---- vendor: composer deps sem dev ----
+# ---- vendor: composer deps ----
+# Includes dev deps: this image is the local/demo stack (APP_ENV=local,
+# spec's "prod-shaped but runs local"), and Telescope — installed `--dev`
+# on purpose, never auto-discovered, gated behind `environment('local')` —
+# needs to actually be present for the CP5 `/telescope` verification. A real
+# production build (out of scope here) would use its own `--no-dev` image.
 FROM composer:2 AS vendor
 RUN install-php-extensions bcmath pcntl
 WORKDIR /app
 COPY composer.json composer.lock ./
-RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist --no-interaction
+RUN composer install --no-scripts --no-autoloader --prefer-dist --no-interaction
 COPY . .
-RUN composer dump-autoload --optimize --no-dev
+RUN composer dump-autoload --optimize
 
 # ---- runtime: FrankenPHP + Octane ----
 FROM dunglas/frankenphp:1-php8.3 AS runtime

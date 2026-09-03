@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use App\Domain\Wallet\Support\CanonicalJson;
 use App\Domain\Wallet\Support\ProblemDetails;
+use App\Support\Metrics;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -107,6 +108,8 @@ class EnsureIdempotency
                 'This Idempotency-Key was already used with different request parameters.',
             );
         }
+
+        Metrics::counter('idempotency_replays_total', 'Requests served from a replayed idempotent response.', [], []);
 
         return response($row->response_body, $row->response_status)
             ->header('Content-Type', 'application/json')

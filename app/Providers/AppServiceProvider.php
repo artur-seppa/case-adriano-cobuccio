@@ -29,6 +29,7 @@ use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
+use Laravel\Telescope\TelescopeServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -48,6 +49,14 @@ class AppServiceProvider extends ServiceProvider
                 $app, Arr::pull($config, 'client', 'phpredis'), $config
             );
         });
+
+        // Telescope is dev-only and never auto-discovered (see composer.json
+        // `dont-discover`) — register it (and its gate provider) manually,
+        // and only outside production, so it never boots there by accident.
+        if ($this->app->environment('local') && class_exists(TelescopeServiceProvider::class)) {
+            $this->app->register(TelescopeServiceProvider::class);
+            $this->app->register(\App\Providers\TelescopeServiceProvider::class);
+        }
     }
 
     /**
@@ -88,6 +97,11 @@ class AppServiceProvider extends ServiceProvider
         Event::listen(FundsDeposited::class, [LogBusinessEvent::class, 'handleDeposited']);
         Event::listen(FundsTransferred::class, [LogBusinessEvent::class, 'handleTransferred']);
         Event::listen(TransactionReversed::class, [LogBusinessEvent::class, 'handleReversed']);
+
+        Gate::define('viewPulse', function ($user = null) {
+            return ! $this->app->environment('production')
+                || in_array(optional($user)->email, config('horizon.dashboard_emails', []), true);
+        });
 
         // Financial app: passwords are at least 10 chars, mixed case + a digit.
         Password::defaults(fn () => app()->isProduction()

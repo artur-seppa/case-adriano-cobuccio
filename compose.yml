@@ -33,6 +33,11 @@ services:
     <<: *app-image
     environment:
       RUN_MIGRATIONS: "true"
+      # Root .env defaults this to false (its outer bootstrap also gets read by
+      # host-side `php artisan` invocations, which have no ext-redis — see the
+      # comment there). This container has ext-redis (docker/Dockerfile), so
+      # Telescope is meant to actually run here.
+      TELESCOPE_ENABLED: "true"
 
   # habilitado na CP3 (Horizon):
   worker:
@@ -53,31 +58,33 @@ services:
       start_period: 20s
       retries: 6
 
-  # ---------------------------------------------------------------------------
-  # Extra PHP processes still pending a later checkpoint. `pulse:work` does
-  # not exist until Pulse (CP5) is installed, so running it now would only
-  # crash-loop. Uncomment when the corresponding checkpoint lands.
-  #
   # habilitado na CP5 (Pulse):
-  # pulse:
-  #   <<: *app-image
-  #   environment:
-  #     RUN_MIGRATIONS: "false"
-  #   depends_on:
-  #     app:
-  #       condition: service_healthy
-  #   command: ["php", "artisan", "pulse:work"]
-  #
-  # habilitado na CP3 (schedule:work acompanha a fila):
-  # scheduler:
-  #   <<: *app-image
-  #   environment:
-  #     RUN_MIGRATIONS: "false"
-  #   depends_on:
-  #     app:
-  #       condition: service_healthy
-  #   command: ["php", "artisan", "schedule:work"]
-  # ---------------------------------------------------------------------------
+  pulse:
+    <<: *app-image
+    environment:
+      RUN_MIGRATIONS: "false"
+    depends_on:
+      app:
+        condition: service_healthy
+    command: ["php", "artisan", "pulse:work"]
+    # Same reason as `worker` above (image's HTTP HEALTHCHECK doesn't apply
+    # to a daemon process) but `pulse:work` has no status subcommand to probe
+    # with — disabled rather than faked; nothing depends on this container's
+    # health.
+    healthcheck:
+      disable: true
+
+  # habilitado na CP5 (schedule:work — carrega o pulse:check por minuto):
+  scheduler:
+    <<: *app-image
+    environment:
+      RUN_MIGRATIONS: "false"
+    depends_on:
+      app:
+        condition: service_healthy
+    command: ["php", "artisan", "schedule:work"]
+    healthcheck:
+      disable: true
 
   # Next.js standalone. API base is baked in at build time as a same-origin path.
   web:

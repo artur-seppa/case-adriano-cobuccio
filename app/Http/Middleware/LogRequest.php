@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Support\Metrics;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -15,15 +16,25 @@ class LogRequest
 
         $response = $next($request);
 
+        $durationSeconds = microtime(true) - $start;
+
         Log::info('request.completed', [
             'method' => $request->getMethod(),
             'path' => $request->path(),
             'status' => $response->getStatusCode(),
-            'duration_ms' => (int) round((microtime(true) - $start) * 1000),
+            'duration_ms' => (int) round($durationSeconds * 1000),
             'user_id' => optional($request->user())->id,
             'request_id' => $request->attributes->get('request_id'),
             'ip' => $request->ip(),
         ]);
+
+        Metrics::histogram(
+            'http_server_request_duration_seconds', 'HTTP server request duration, in seconds.',
+            $durationSeconds,
+            ['method', 'route', 'status'],
+            [$request->getMethod(), $request->route()?->getName() ?? $request->path(), (string) $response->getStatusCode()],
+            [0.05, 0.1, 0.25, 0.5, 1, 2.5, 5],
+        );
 
         return $response;
     }

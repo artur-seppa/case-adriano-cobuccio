@@ -56,41 +56,47 @@ Tratamento central em `bootstrap/app.php`; um `ProblemMapper` cobre cada exceç�
 
 ---
 
-## Rodando
+## Rodando com Docker (stack completa)
 
 ```bash
-cp .env.example .env
-composer install
-docker compose up -d        # postgres (wallet + wallet_test) + redis + mailpit
-php artisan key:generate
-php artisan migrate --seed   # tabelas + carteira external_world (+ dados de demo em local)
-
-PHP_CLI_SERVER_WORKERS=10 php artisan serve --no-reload   # API em http://localhost:8000
+cp .env.example .env      # já vem pronto para o compose
+make up                   # sobe app (FrankenPHP/Octane), web (Next), nginx, postgres, redis, mailpit, worker, pulse, scheduler
 ```
 
-> Multi-worker é obrigatório se o frontend for usado junto: a conexão SSE sempre-aberta
-> (`GET /api/v1/stream`) prende o único worker do `php artisan serve` padrão e trava todo o resto.
-> Só a API, via `curl`/testes, `php artisan serve` sozinho basta.
+Abrir `http://localhost`. Usuários de demo: `make fresh` (roda o `DemoSeeder`).
 
-Com a API no ar: contrato em `http://localhost:8000/docs/api`, e um cron/worker de
-agendamento com `php artisan schedule:work` (reconcile a cada 15 min, prune de hora em hora).
-O empacotamento de produção (FrankenPHP/Octane + reverse proxy) ainda não está no repositório.
+| | |
+|---|---|
+| App | `http://localhost` |
+| Contrato da API | `http://localhost/docs/api` |
+| Health | `http://localhost/health` · `http://localhost/up` |
+| Pulse (saúde agregada) | `http://localhost/pulse` |
+| Horizon (fila) | `http://localhost/horizon` |
+| Telescope (forense, só local) | `http://localhost/telescope` |
+| Métricas Prometheus | `http://localhost/metrics` |
+| Mailpit | `http://localhost:8025` |
 
-O compose expõe Postgres em `localhost:5442`, Redis em `localhost:6389` (portas remapeadas
-para não colidir com instâncias locais) e o **Mailpit** em `localhost:8025` — os e-mails de
-verificação de conta e de reset de senha caem lá. `.env` e `.env.testing` já apontam para tudo.
+Sem TLS de propósito — zera setup local. Em deploy real, TLS termina no proxy/load balancer;
+setar `SESSION_SECURE_COOKIE=true`, `APP_ENV=production` (dashboards passam a exigir e-mail em
+`HORIZON_DASHBOARD_EMAILS`; Telescope não carrega — seu registro no `AppServiceProvider` é
+condicionado a `environment('local')`), e ajustar `SANCTUM_STATEFUL_DOMAINS`/`APP_URL` para o
+domínio real.
 
-O link de reset de senha aponta para o SPA (`FRONTEND_URL`, default `http://localhost:3000`) —
-`/reset-password?token=...&email=...`; sem frontend rodando, pegue o `token` da URL no Mailpit
-e chame `POST /api/reset-password` direto.
+O link de reset de senha aponta para o SPA (`FRONTEND_URL`) — `/reset-password?token=...&email=...`;
+pegue o `token` da URL no Mailpit e chame `POST /api/reset-password` direto se preferir sem UI.
 
-Em `APP_ENV=local`, o `--seed` também roda o **`DemoSeeder`**: 3 usuários verificados
-(`alice@wallet.test`, `bruno@wallet.test`, `carla@wallet.test`, senha `Password1234`), cada um
-com carteira financiada, 3 transferências entre eles e 1 estorno — tudo pelas Actions reais, o
-`wallet:reconcile` passa em seguida. Roda também isolado com
-`php artisan db:seed --class="Database\Seeders\DemoSeeder"`; nunca em produção.
+Em `APP_ENV=local`, o `--seed` do `make fresh` também roda o **`DemoSeeder`**: 3 usuários
+verificados (`alice@wallet.test`, `bruno@wallet.test`, `carla@wallet.test`, senha `Password1234`),
+cada um com carteira financiada, 3 transferências entre eles e 1 estorno — tudo pelas Actions
+reais, o `wallet:reconcile` passa em seguida. Roda também isolado com
+`docker compose exec app php artisan db:seed --class="Database\Seeders\DemoSeeder"`; nunca em
+produção.
 
 ### Testes
+
+A suíte roda no **host** (não em Docker), contra o Postgres/Redis publicados pelo próprio
+`compose.yml` (`127.0.0.1:5442`/`127.0.0.1:6389`, mesmas portas de `.env.testing`) — `make up`
+já deixa isso pronto.
 
 ```bash
 php artisan test             # unit + integração + HTTP + concorrência + arquitetura
@@ -98,7 +104,9 @@ php artisan test             # unit + integração + HTTP + concorrência + arqu
 php artisan wallet:reconcile # invariante contábil — exit 0 saudável, 1 drift
 ```
 
-Ou via `make`: `up` · `down` · `serve` · `fresh` · `test` · `pint` · `reconcile` · `schedule` · `docs` · `routes`.
+Ou via `make`: `up` · `down` · `fresh` · `test` · `pint` · `logs` · `shell` · `dtest` ·
+`dreconcile` · `serve` · `reconcile` · `schedule` · `docs` · `routes` (os últimos cinco assumem
+um PHP local com Postgres/Redis próprios — fora do fluxo Docker documentado aqui).
 
 A suíte roda contra **PostgreSQL real** (`wallet_test`), nunca SQLite — o trigger contábil só
 dispara em commit de verdade. A suíte `tests/Concurrency` forka processos reais com `pcntl`
@@ -159,21 +167,24 @@ atrás do gate `viewApiDocs`.
 
 | Recurso | Como checar |
 |---|---|
-| Health check | `curl -i http://localhost:8000/up` → `200` (sem auth) |
-| Índice de serviço | `curl http://localhost:8000/` → JSON com links de `docs`, `openapi`, `health` |
-| `X-Request-Id` | `curl -i http://localhost:8000/up \| grep -i x-request-id` — toda resposta carrega o id de correlação (aceita o do cliente ou gera); volta no corpo de erro como `request_id` e entra no `Context` do log |
+| Health check | `curl -i http://localhost/health` → `200 {"status":"ok","db":"ok","redis":"ok"}` (503 se algum componente cair); `http://localhost/up` é o smoke-check nativo do Laravel |
+| Índice de serviço | `curl http://localhost/` → JSON com links de `docs`, `openapi`, `health` |
+| `X-Request-Id` | `curl -i http://localhost/up \| grep -i x-request-id` — toda resposta carrega o id de correlação (aceita o do cliente ou gera); volta no corpo de erro como `request_id`, lido do `Context` (per-request sob Octane, nunca do container) |
+| Logs estruturados | JSON de uma linha por entrada em `stderr` (`LOG_CHANNEL=stderr`, `docker compose logs app`) — inclui `request.completed` por request e os eventos de negócio (`funds.deposited`, `funds.transferred`, `transaction.reversed`) |
 | Erros `problem+json` | bugs/invariantes violadas (`UnbalancedLedgerException`, exceção inesperada) → `500` genérico + `Log::critical` com contexto e `request_id`; nunca vazam detalhe interno |
-| Logs ao vivo | `php artisan pail` (já incluso — `laravel/pail`) |
+| **Pulse** | `http://localhost/pulse` — saúde agregada (requests, jobs, exceptions, drift do reconcile via `Pulse::set`) |
+| **Horizon** | `http://localhost/horizon` — fila Redis (`mail`/`default`), jobs recentes, throughput |
+| **Telescope** (só `local`) | `http://localhost/telescope` — requests, queries, jobs, eventos, cache; nunca registra fora de `environment('local')` |
+| **`/metrics`** (Prometheus) | `http://localhost/metrics` — 9 séries: `wallet_transactions_total`, `wallet_transaction_amount_cents`, `wallet_reversals_total`, `wallet_reconcile_drift_cents`, `wallet_reconcile_last_run_timestamp`, `wallet_insufficient_funds_total`, `wallet_idempotency_replays_total`, `wallet_http_server_request_duration_seconds`, `wallet_sse_active_connections` |
 | Invariante contábil | `php artisan wallet:reconcile` — exit ≠ 0 e `Log::critical` em drift; roda a cada 15 min pelo scheduler e no CI sobre dados semeados |
 | Limpeza de idempotência | `php artisan idempotency:prune` — remove `idempotency_keys` expiradas; agendado de hora em hora |
 
-Agendamento em `routes/console.php`; precisa de um `schedule:work` (ou cron) rodando.
+Agendamento em `routes/console.php` (`reconcile` 15min, `prune` 1h, `pulse:check` 1min) — no
+Docker, o serviço `scheduler` (`schedule:work`) cuida disso.
 
-### Ainda não no repositório (Plano 4 — empacotamento Docker)
-
-Dashboards de **Pulse/Horizon** e endpoint **`/metrics` Prometheus** entram junto com a infra
-Docker de produção. Não há `/horizon`, `/pulse` nem `/metrics` neste checkout — as libs não
-estão no `composer.json` e não há rota registrada (`php artisan route:list` confirma).
+Dashboards abrem sem allowlist em `APP_ENV=local` (a stack Docker default). Em produção real:
+`viewHorizon`/`viewPulse` exigem e-mail em `HORIZON_DASHBOARD_EMAILS`, e Telescope simplesmente
+não registra.
 
 ---
 

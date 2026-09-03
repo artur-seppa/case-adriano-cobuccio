@@ -14,6 +14,7 @@ use App\Domain\Wallet\Exceptions\TransactionCouldNotCompleteException;
 use App\Domain\Wallet\Models\Transaction;
 use App\Domain\Wallet\Models\Wallet;
 use App\Domain\Wallet\Services\LedgerPoster;
+use App\Support\Metrics;
 use Illuminate\Database\DatabaseManager;
 use Illuminate\Database\QueryException;
 
@@ -68,6 +69,10 @@ final class TransferFunds
             }, attempts: 3);
         } catch (QueryException $e) {
             throw new TransactionCouldNotCompleteException(3, previous: $e);
+        } catch (InsufficientFundsException $e) {
+            Metrics::counter('insufficient_funds_total', 'Transfers rejected for insufficient funds.', [], []);
+
+            throw $e;
         }
 
         FundsTransferred::dispatch($transaction);
