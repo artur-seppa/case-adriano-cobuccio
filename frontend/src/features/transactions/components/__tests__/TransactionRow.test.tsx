@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { TransactionRow } from "../TransactionRow";
 import type { TransactionResource } from "../../api/transactions";
 
@@ -19,12 +20,22 @@ const base: TransactionResource = {
 };
 
 it("shows an incoming amount in green with a plus sign", () => {
-  render(<TransactionRow transaction={base} />);
+  render(<TransactionRow transaction={base} onSelect={() => {}} />);
   expect(screen.getByText("+ R$ 50,00").className).toContain("text-brand-600");
 });
 
 it("strikes through the counterparty label and shows a badge when reversed", () => {
-  render(<TransactionRow transaction={{ ...base, status: "reversed" }} />);
+  render(<TransactionRow transaction={{ ...base, status: "reversed" }} onSelect={() => {}} />);
   expect(screen.getByText("Maria").className).toContain("line-through");
   expect(screen.getByText("Estornada")).toBeInTheDocument();
+});
+
+it("calls onSelect with the transaction id when clicked", async () => {
+  const onSelect = vi.fn();
+  const user = userEvent.setup();
+  render(<TransactionRow transaction={base} onSelect={onSelect} />);
+
+  await user.click(screen.getByRole("button"));
+
+  expect(onSelect).toHaveBeenCalledWith("t1");
 });

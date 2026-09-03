@@ -1,8 +1,6 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { useRouter } from "next/navigation";
-import { Card } from "@/shared/ui/Card";
 import { Button } from "@/shared/ui/Button";
 import { Input } from "@/shared/ui/Input";
 import { MoneyInput } from "@/shared/money/MoneyInput";
@@ -11,8 +9,7 @@ import { useIdempotencyKey } from "@/shared/api/useIdempotencyKey";
 import { fieldError, genericErrorMessage } from "@/shared/api/fieldError";
 import { useDeposit } from "../hooks/useDeposit";
 
-export function DepositForm() {
-  const router = useRouter();
+export function DepositForm({ onSuccess }: { onSuccess?: () => void }) {
   const { toast } = useToast();
   const deposit = useDeposit();
   const idempotencyKey = useIdempotencyKey();
@@ -27,36 +24,33 @@ export function DepositForm() {
         onSuccess: () => {
           idempotencyKey.reset();
           toast({ title: "Depósito realizado.", variant: "success" });
-          router.push("/");
+          onSuccess?.();
         },
       },
     );
   }
 
   return (
-    <Card className="mx-auto max-w-lg">
-      <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
-        <h1 className="text-xl font-semibold text-ink-900">Depositar</h1>
-        <MoneyInput
-          label="Valor"
-          value={amountCents}
-          onChange={setAmountCents}
-          error={fieldError(deposit.error, "amount")}
-        />
-        <Input
-          label="Descrição (opcional)"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-        />
-        {genericErrorMessage(deposit.error) && (
-          <p role="alert" className="text-sm text-danger-500">
-            {genericErrorMessage(deposit.error)}
-          </p>
-        )}
-        <Button type="submit" loading={deposit.isPending} disabled={amountCents === 0}>
-          Depositar
-        </Button>
-      </form>
-    </Card>
+    <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
+      <MoneyInput
+        label="Valor"
+        value={amountCents}
+        onChange={setAmountCents}
+        error={fieldError(deposit.error, "amount")}
+      />
+      <Input
+        label="Descrição (opcional)"
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+      />
+      {genericErrorMessage(deposit.error) && (
+        <p role="alert" className="text-sm text-danger-500">
+          {genericErrorMessage(deposit.error)}
+        </p>
+      )}
+      <Button type="submit" loading={deposit.isPending} disabled={amountCents === 0}>
+        Depositar
+      </Button>
+    </form>
   );
 }

@@ -4,7 +4,7 @@ import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Input } from "@/shared/ui/Input";
 import { Button } from "@/shared/ui/Button";
-import { fieldError, genericErrorMessage } from "@/shared/api/fieldError";
+import { loginFailureMessage, genericErrorMessage } from "@/shared/api/fieldError";
 import { useLogin } from "../hooks/useLogin";
 
 export function LoginForm() {
@@ -22,7 +22,7 @@ export function LoginForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
+    <form onSubmit={handleSubmit} className="flex flex-col gap-4">
       <h1 className="text-xl font-semibold text-ink-900">Entrar</h1>
       <Input
         label="E-mail"
@@ -30,7 +30,6 @@ export function LoginForm() {
         required
         value={email}
         onChange={(e) => setEmail(e.target.value)}
-        error={fieldError(login.error, "email")}
       />
       <Input
         label="Senha"
@@ -38,11 +37,10 @@ export function LoginForm() {
         required
         value={password}
         onChange={(e) => setPassword(e.target.value)}
-        error={fieldError(login.error, "password")}
       />
-      {genericErrorMessage(login.error) && (
+      {(loginFailureMessage(login.error) ?? genericErrorMessage(login.error)) && (
         <p role="alert" className="text-sm text-danger-500">
-          {genericErrorMessage(login.error)}
+          {loginFailureMessage(login.error) ?? genericErrorMessage(login.error)}
         </p>
       )}
       <Button type="submit" loading={login.isPending}>

@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { Badge } from "@/shared/ui/Badge";
 import type { TransactionResource } from "../api/transactions";
 
@@ -8,14 +7,20 @@ const DIRECTION_ICON: Record<TransactionResource["direction"], string> = {
   self: "↔",
 };
 
-export function TransactionRow({ transaction }: { transaction: TransactionResource }) {
+interface Props {
+  transaction: TransactionResource;
+  onSelect: (id: string) => void;
+}
+
+export function TransactionRow({ transaction, onSelect }: Props) {
   const isReversed = transaction.status === "reversed";
   const isIncoming = transaction.direction === "in";
 
   return (
-    <Link
-      href={`/transactions/${transaction.id}`}
-      className="flex items-center justify-between gap-4 px-4 py-3 hover:bg-canvas"
+    <button
+      type="button"
+      onClick={() => onSelect(transaction.id)}
+      className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition-colors hover:bg-canvas"
     >
       <div className="flex items-center gap-3">
         <span
@@ -39,6 +44,6 @@ export function TransactionRow({ transaction }: { transaction: TransactionResour
           {isIncoming ? "+" : "-"} {transaction.amount_formatted}
         </span>
       </div>
-    </Link>
+    </button>
   );
 }

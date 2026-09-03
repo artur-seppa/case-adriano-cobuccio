@@ -157,8 +157,6 @@ atrás do gate `viewApiDocs`.
 
 ## Observabilidade
 
-### Disponível agora (como verificar)
-
 | Recurso | Como checar |
 |---|---|
 | Health check | `curl -i http://localhost:8000/up` → `200` (sem auth) |

@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Input } from "@/shared/ui/Input";
 import { Button } from "@/shared/ui/Button";
 import { fieldError, genericErrorMessage } from "@/shared/api/fieldError";
+import { BackToLogin } from "./BackToLogin";
 import { useResetPassword } from "../hooks/useResetPassword";
 
 export function ResetPasswordForm() {
@@ -27,6 +28,7 @@ export function ResetPasswordForm() {
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
+      <BackToLogin />
       <h1 className="text-xl font-semibold text-ink-900">Redefinir senha</h1>
       <p className="text-sm text-ink-500">{email}</p>
       {fieldError(resetPassword.error, "email") && (

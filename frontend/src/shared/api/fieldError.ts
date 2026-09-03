@@ -15,6 +15,18 @@ export function insufficientFundsMessage(error: unknown): string | undefined {
   return undefined;
 }
 
+/**
+ * Login/auth failures are shown as one general message rather than a per-field
+ * error: the API can't (and shouldn't) say whether it was the e-mail or the
+ * password, and confirming which is a mild account-enumeration leak.
+ */
+export function loginFailureMessage(error: unknown): string | undefined {
+  if (error instanceof ApiError && (error.status === 401 || error.status === 422)) {
+    return "E-mail ou senha incorretos.";
+  }
+  return undefined;
+}
+
 export function genericErrorMessage(error: unknown): string | undefined {
   if (error instanceof ApiError) {
     if (error.errors) return undefined;

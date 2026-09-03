@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Input } from "@/shared/ui/Input";
 import { Button } from "@/shared/ui/Button";
 import { fieldError, genericErrorMessage } from "@/shared/api/fieldError";
+import { BackToLogin } from "./BackToLogin";
 import { useRegister } from "../hooks/useRegister";
 
 export function RegisterForm() {
@@ -22,7 +23,8 @@ export function RegisterForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
+    <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+      <BackToLogin />
       <h1 className="text-xl font-semibold text-ink-900">Criar conta</h1>
       <Input
         label="Nome"
@@ -62,9 +64,6 @@ export function RegisterForm() {
       <Button type="submit" loading={registerMutation.isPending}>
         Criar conta
       </Button>
-      <a href="/login" className="text-center text-sm text-ink-500 hover:text-brand-600">
-        Já tenho conta
-      </a>
     </form>
   );
 }

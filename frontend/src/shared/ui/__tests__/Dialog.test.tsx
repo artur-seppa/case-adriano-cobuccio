@@ -23,3 +23,14 @@ it("opens on trigger click and traps focus, closes on escape", async () => {
   await user.keyboard("{Escape}");
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 });
+
+it("closes when the X button is clicked", async () => {
+  const user = userEvent.setup();
+  render(<Harness />);
+
+  await user.click(screen.getByRole("button", { name: "Abrir" }));
+  expect(screen.getByRole("dialog")).toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "Fechar" }));
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+});

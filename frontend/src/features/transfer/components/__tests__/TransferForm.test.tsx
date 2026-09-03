@@ -7,8 +7,6 @@ import { createQueryClient } from "@/shared/query/queryClient";
 import { ToastProvider } from "@/shared/ui/Toast";
 import { TransferForm } from "../TransferForm";
 
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
-
 function renderForm() {
   server.use(
     http.get("/api/v1/wallet", () =>

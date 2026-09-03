@@ -23,7 +23,7 @@ export function ProfileForm() {
   return (
     <Card>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
-        <h2 className="text-sm font-semibold text-ink-900">Perfil</h2>
+        <h2 className="text-md font-semibold text-ink-900">Perfil</h2>
         <Input
           label="Nome"
           value={form.name}

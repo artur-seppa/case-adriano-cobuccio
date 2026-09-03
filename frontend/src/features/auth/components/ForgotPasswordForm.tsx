@@ -4,6 +4,7 @@ import { FormEvent, useState } from "react";
 import { Input } from "@/shared/ui/Input";
 import { Button } from "@/shared/ui/Button";
 import { fieldError, genericErrorMessage } from "@/shared/api/fieldError";
+import { BackToLogin } from "./BackToLogin";
 import { useForgotPassword } from "../hooks/useForgotPassword";
 
 export function ForgotPasswordForm() {
@@ -12,9 +13,12 @@ export function ForgotPasswordForm() {
 
   if (forgotPassword.isSuccess) {
     return (
-      <p className="text-center text-sm text-ink-900">
-        Se existir uma conta com esse e-mail, enviamos um link de redefinição.
-      </p>
+      <div className="flex flex-col">
+        <BackToLogin />
+        <p className="text-sm text-ink-900">
+          Se existir uma conta com esse e-mail, enviamos um link de redefinição.
+        </p>
+      </div>
     );
   }
 
@@ -27,6 +31,7 @@ export function ForgotPasswordForm() {
       className="flex flex-col gap-4"
       noValidate
     >
+      <BackToLogin />
       <h1 className="text-xl font-semibold text-ink-900">Esqueci minha senha</h1>
       <Input
         label="E-mail"

@@ -1,19 +1,12 @@
-// shared/ui/Navbar.tsx
+// shared/ui/TopBar.tsx
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { useLogout } from "@/features/auth/hooks/useLogout";
 import type { AuthUser } from "@/features/auth/api/auth";
-
-const TITLES: Record<string, string> = {
-  "/": "Dashboard",
-  "/transactions": "Extrato",
-  "/deposit": "Depositar",
-  "/transfer": "Transferir",
-  "/settings": "Configurações",
-};
+import { Wordmark } from "./Wordmark";
 
 function initials(name: string): string {
   return name
@@ -23,18 +16,24 @@ function initials(name: string): string {
     .join("");
 }
 
-export function Navbar({ user }: { user: AuthUser }) {
-  const pathname = usePathname();
+export function TopBar({ user }: { user: AuthUser }) {
   const router = useRouter();
   const logout = useLogout();
 
-  const title = Object.entries(TITLES).find(([path]) => pathname === path || (path !== "/" && pathname.startsWith(path)))?.[1] ?? "";
-
   return (
-    <header className="fixed inset-x-0 top-0 z-40 ml-60 flex h-16 items-center justify-between bg-surface px-6 shadow-elevation">
-      <h1 className="text-lg font-semibold text-ink-900">{title}</h1>
+    <header className="flex items-center justify-between border-b border-ink-500/10 px-5 py-4 sm:px-6">
+      <Link
+        href="/"
+        aria-label="Ir para o início"
+        className="rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+      >
+        <Wordmark className="text-lg text-ink-900" />
+      </Link>
       <DropdownMenu.Root>
-        <DropdownMenu.Trigger className="flex items-center gap-2 rounded-full py-1 pl-1 pr-3 hover:bg-canvas">
+        <DropdownMenu.Trigger
+          aria-label="Menu da conta"
+          className="flex items-center gap-2 rounded-full py-1 pl-1 pr-3 transition-colors hover:bg-canvas"
+        >
           <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-100 text-sm font-semibold text-brand-900">
             {initials(user.name)}
           </span>
@@ -43,6 +42,7 @@ export function Navbar({ user }: { user: AuthUser }) {
         <DropdownMenu.Portal>
           <DropdownMenu.Content
             align="end"
+            sideOffset={4}
             className="min-w-[10rem] rounded-lg bg-surface p-1 shadow-elevation"
           >
             <DropdownMenu.Item asChild>

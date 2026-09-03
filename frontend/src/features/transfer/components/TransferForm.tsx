@@ -1,8 +1,6 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { useRouter } from "next/navigation";
-import { Card } from "@/shared/ui/Card";
 import { Button } from "@/shared/ui/Button";
 import { Input } from "@/shared/ui/Input";
 import { MoneyInput } from "@/shared/money/MoneyInput";
@@ -12,8 +10,7 @@ import { fieldError, genericErrorMessage, insufficientFundsMessage } from "@/sha
 import { useWallet } from "@/features/wallet/hooks/useWallet";
 import { useTransfer } from "../hooks/useTransfer";
 
-export function TransferForm() {
-  const router = useRouter();
+export function TransferForm({ onSuccess }: { onSuccess?: () => void }) {
   const { toast } = useToast();
   const wallet = useWallet();
   const transfer = useTransfer();
@@ -30,47 +27,44 @@ export function TransferForm() {
         onSuccess: () => {
           idempotencyKey.reset();
           toast({ title: "Transferência enviada.", variant: "success" });
-          router.push("/");
+          onSuccess?.();
         },
       },
     );
   }
 
   return (
-    <Card className="mx-auto max-w-lg">
-      <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
-        <h1 className="text-xl font-semibold text-ink-900">Transferir</h1>
-        {wallet.data && (
-          <p className="text-sm text-ink-500">Saldo disponível: {wallet.data.balance_formatted}</p>
-        )}
-        <Input
-          label="Destinatário (e-mail)"
-          type="email"
-          required
-          value={recipient}
-          onChange={(e) => setRecipient(e.target.value)}
-          error={fieldError(transfer.error, "recipient")}
-        />
-        <MoneyInput
-          label="Valor"
-          value={amountCents}
-          onChange={setAmountCents}
-          error={fieldError(transfer.error, "amount") ?? insufficientFundsMessage(transfer.error)}
-        />
-        <Input
-          label="Descrição (opcional)"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-        />
-        {genericErrorMessage(transfer.error) && (
-          <p role="alert" className="text-sm text-danger-500">
-            {genericErrorMessage(transfer.error)}
-          </p>
-        )}
-        <Button type="submit" loading={transfer.isPending} disabled={amountCents === 0 || !recipient}>
-          Transferir
-        </Button>
-      </form>
-    </Card>
+    <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
+      {wallet.data && (
+        <p className="text-sm text-ink-500">Saldo disponível: {wallet.data.balance_formatted}</p>
+      )}
+      <Input
+        label="Destinatário (e-mail)"
+        type="email"
+        required
+        value={recipient}
+        onChange={(e) => setRecipient(e.target.value)}
+        error={fieldError(transfer.error, "recipient")}
+      />
+      <MoneyInput
+        label="Valor"
+        value={amountCents}
+        onChange={setAmountCents}
+        error={fieldError(transfer.error, "amount") ?? insufficientFundsMessage(transfer.error)}
+      />
+      <Input
+        label="Descrição (opcional)"
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+      />
+      {genericErrorMessage(transfer.error) && (
+        <p role="alert" className="text-sm text-danger-500">
+          {genericErrorMessage(transfer.error)}
+        </p>
+      )}
+      <Button type="submit" loading={transfer.isPending} disabled={amountCents === 0 || !recipient}>
+        Transferir
+      </Button>
+    </form>
   );
 }

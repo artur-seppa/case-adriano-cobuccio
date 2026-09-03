@@ -1,39 +1,39 @@
 "use client";
 
-import { Card } from "@/shared/ui/Card";
 import { Skeleton } from "@/shared/ui/Skeleton";
 import { Button } from "@/shared/ui/Button";
 import { useWallet } from "../hooks/useWallet";
 
-export function BalanceCard() {
+export function BalanceCard({ actions }: { actions?: React.ReactNode }) {
   const wallet = useWallet();
 
   if (wallet.isError) {
     return (
-      <Card className="flex flex-col gap-3">
+      <div className="flex flex-col gap-3">
         <p className="text-sm text-danger-500">Não foi possível carregar o saldo.</p>
-        <Button variant="secondary" onClick={() => wallet.refetch()}>
+        <Button variant="secondary" onClick={() => wallet.refetch()} className="self-start">
           Tentar de novo
         </Button>
-      </Card>
+      </div>
     );
   }
 
   if (wallet.isLoading || !wallet.data) {
     return (
-      <Card>
+      <div>
         <Skeleton className="h-4 w-24" />
-        <Skeleton className="mt-3 h-10 w-48" />
-      </Card>
+        <Skeleton className="mt-3 h-11 w-48" />
+      </div>
     );
   }
 
   return (
-    <Card>
+    <div>
       <p className="text-sm text-ink-500">Saldo disponível</p>
-      <p aria-live="polite" className="mt-2 text-4xl font-semibold text-ink-900">
+      <p aria-live="polite" className="mt-2 text-4xl font-semibold tabular-nums tracking-tight text-ink-900">
         {wallet.data.balance_formatted}
       </p>
-    </Card>
+      {actions && <div className="mt-5 flex flex-wrap gap-3">{actions}</div>}
+    </div>
   );
 }

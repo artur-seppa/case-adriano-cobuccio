@@ -30,7 +30,7 @@ export function TransactionFiltersBar() {
   const [filters, setFilters] = useTransactionFilters();
 
   return (
-    <div className="flex flex-wrap gap-3 p-4">
+    <div className="flex flex-wrap gap-2 pt-3">
       <select
         aria-label="Tipo"
         className={selectClass()}

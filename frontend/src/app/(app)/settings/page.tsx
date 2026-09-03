@@ -5,6 +5,7 @@ import { SessionsList } from "@/features/settings/components/SessionsList";
 export default function SettingsPage() {
   return (
     <div className="flex flex-col gap-6">
+      <h1 className="text-xl font-semibold text-ink-900">Configurações</h1>
       <ProfileForm />
       <PasswordForm />
       <SessionsList />

@@ -7,7 +7,9 @@
   --color-brand-600: #388E3B;
   --color-brand-900: #103E13;
 
-  --color-canvas: #F5F7FA;
+  /* Green-tinted page ground so the white top bar and cards read as distinct
+     panels floating on it. */
+  --color-canvas: #DEEEDF;
   --color-surface: #FFFFFF;
 
   --color-ink-900: #18191F;
@@ -18,7 +20,7 @@
 
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
 
-  --shadow-elevation: 0 8px 16px rgba(171, 190, 209, 0.4);
+  --shadow-elevation: 0 10px 24px -6px rgba(16, 62, 19, 0.16);
 }
 
 body {

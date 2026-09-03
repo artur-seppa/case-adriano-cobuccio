@@ -12,7 +12,26 @@ function renderWithClient(ui: React.ReactElement) {
   return render(<QueryClientProvider client={createQueryClient()}>{ui}</QueryClientProvider>);
 }
 
-it("shows the field error returned by the API on invalid credentials", async () => {
+it("does not submit while e-mail or password is empty (client-side required)", async () => {
+  let hit = false;
+  server.use(http.post("/api/login", () => { hit = true; return new HttpResponse(null, { status: 204 }); }));
+
+  const user = userEvent.setup();
+  renderWithClient(<LoginForm />);
+
+  await user.click(screen.getByRole("button", { name: "Entrar" }));
+  expect(hit).toBe(false);
+
+  await user.type(screen.getByLabelText("E-mail"), "ana@example.test");
+  await user.click(screen.getByRole("button", { name: "Entrar" }));
+  expect(hit).toBe(false); // password still empty
+
+  await user.type(screen.getByLabelText("Senha"), "secret");
+  await user.click(screen.getByRole("button", { name: "Entrar" }));
+  expect(hit).toBe(true);
+});
+
+it("shows one general message on invalid credentials, not a per-field error", async () => {
   server.use(
     http.post("/api/login", () =>
       HttpResponse.json(
@@ -34,5 +53,7 @@ it("shows the field error returned by the API on invalid credentials", async () 
   await user.type(screen.getByLabelText("Senha"), "wrong");
   await user.click(screen.getByRole("button", { name: "Entrar" }));
 
-  expect(await screen.findByText("These credentials do not match our records.")).toBeInTheDocument();
+  expect(await screen.findByText("E-mail ou senha incorretos.")).toBeInTheDocument();
+  // the raw API field message is not surfaced
+  expect(screen.queryByText("These credentials do not match our records.")).not.toBeInTheDocument();
 });

@@ -28,7 +28,7 @@ export function PasswordForm() {
   return (
     <Card>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
-        <h2 className="text-sm font-semibold text-ink-900">Senha</h2>
+        <h2 className="text-md font-semibold text-ink-900">Senha</h2>
         <Input
           label="Senha atual"
           type="password"
