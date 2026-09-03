@@ -10,6 +10,7 @@
         "dedoc/scramble": "^0.13.42",
         "laravel/fortify": "^1.25",
         "laravel/framework": "^12.0",
+        "laravel/octane": "^2.19",
         "laravel/sanctum": "^4.0",
         "laravel/tinker": "^2.10.1",
         "moneyphp/money": "^4.5",
