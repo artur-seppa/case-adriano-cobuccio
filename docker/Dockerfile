@@ -11,7 +11,7 @@ RUN composer dump-autoload --optimize --no-dev
 
 # ---- runtime: FrankenPHP + Octane ----
 FROM dunglas/frankenphp:1-php8.3 AS runtime
-RUN install-php-extensions redis pcntl sockets pdo_pgsql opcache bcmath \
+RUN install-php-extensions redis pcntl sockets pdo_pgsql opcache bcmath intl \
     && apt-get update && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app

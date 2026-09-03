@@ -71,9 +71,6 @@ services:
   # ---------------------------------------------------------------------------
 
   # Next.js standalone. API base is baked in at build time as a same-origin path.
-  # HOSTNAME=0.0.0.0 so server.js binds all interfaces: Docker otherwise sets
-  # HOSTNAME to the container id and Next binds only that name, which leaves the
-  # Dockerfile HEALTHCHECK (hits localhost:3000) failing forever.
   web:
     build:
       context: ./frontend
@@ -81,8 +78,6 @@ services:
       args:
         NEXT_PUBLIC_API_BASE: /api/v1
     image: wallet-web:local
-    environment:
-      HOSTNAME: "0.0.0.0"
     restart: unless-stopped
 
   postgres:

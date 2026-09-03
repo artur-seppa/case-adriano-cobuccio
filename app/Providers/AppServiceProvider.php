@@ -6,6 +6,7 @@ use App\Domain\Wallet\Events\FundsDeposited;
 use App\Domain\Wallet\Events\FundsTransferred;
 use App\Domain\Wallet\Events\TransactionReversed;
 use App\Domain\Wallet\Listeners\PublishUserEvent;
+use App\Redis\MultiClientRedisManager;
 use Closure;
 use Dedoc\Scramble\Scramble;
 use Dedoc\Scramble\Support\Generator\OpenApi;
@@ -20,6 +21,7 @@ use Dedoc\Scramble\Support\Generator\Types\StringType;
 use Dedoc\Scramble\Support\RouteInfo;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
@@ -34,7 +36,17 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // Swap in a Redis manager that honours a per-connection `client` key, so
+        // the SSE `pubsub` connection can run on predis (for pubSubLoop()) while
+        // queue/cache/Horizon stay on phpredis. `extend` wins even though the
+        // framework's RedisServiceProvider is deferred. See config/database.php.
+        $this->app->extend('redis', function ($manager, $app) {
+            $config = $app->make('config')->get('database.redis', []);
+
+            return new MultiClientRedisManager(
+                $app, Arr::pull($config, 'client', 'phpredis'), $config
+            );
+        });
     }
 
     /**
