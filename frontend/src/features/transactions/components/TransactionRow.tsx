@@ -1,0 +1,49 @@
+import { Badge } from "@/shared/ui/Badge";
+import type { TransactionResource } from "../api/transactions";
+
+const DIRECTION_ICON: Record<TransactionResource["direction"], string> = {
+  in: "↓",
+  out: "↑",
+  self: "↔",
+};
+
+interface Props {
+  transaction: TransactionResource;
+  onSelect: (id: string) => void;
+}
+
+export function TransactionRow({ transaction, onSelect }: Props) {
+  const isReversed = transaction.status === "reversed";
+  const isIncoming = transaction.direction === "in";
+
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(transaction.id)}
+      className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition-colors hover:bg-canvas"
+    >
+      <div className="flex items-center gap-3">
+        <span
+          aria-hidden
+          className={`flex h-8 w-8 items-center justify-center rounded-full text-sm ${
+            isIncoming ? "bg-brand-50 text-brand-900" : "bg-ink-500/10 text-ink-900"
+          }`}
+        >
+          {DIRECTION_ICON[transaction.direction]}
+        </span>
+        <div>
+          <p className={`text-sm font-medium text-ink-900 ${isReversed ? "line-through" : ""}`}>
+            {transaction.counterparty.label}
+          </p>
+          <p className="text-xs text-ink-500">{new Date(transaction.created_at).toLocaleString("pt-BR")}</p>
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        {isReversed && <Badge variant="neutral">Estornada</Badge>}
+        <span className={`text-sm font-semibold ${isIncoming ? "text-brand-600" : "text-danger-500"}`}>
+          {isIncoming ? "+" : "-"} {transaction.amount_formatted}
+        </span>
+      </div>
+    </button>
+  );
+}

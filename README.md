@@ -65,8 +65,12 @@ docker compose up -d        # postgres (wallet + wallet_test) + redis + mailpit
 php artisan key:generate
 php artisan migrate --seed   # tabelas + carteira external_world (+ dados de demo em local)
 
-php artisan serve            # sobe a API em http://localhost:8000
+PHP_CLI_SERVER_WORKERS=10 php artisan serve --no-reload   # API em http://localhost:8000
 ```
+
+> Multi-worker é obrigatório se o frontend for usado junto: a conexão SSE sempre-aberta
+> (`GET /api/v1/stream`) prende o único worker do `php artisan serve` padrão e trava todo o resto.
+> Só a API, via `curl`/testes, `php artisan serve` sozinho basta.
 
 Com a API no ar: contrato em `http://localhost:8000/docs/api`, e um cron/worker de
 agendamento com `php artisan schedule:work` (reconcile a cada 15 min, prune de hora em hora).
@@ -153,18 +157,23 @@ atrás do gate `viewApiDocs`.
 
 ## Observabilidade
 
-O que já existe no código (dashboards de Pulse/Horizon e `/metrics` Prometheus entram junto
-com o empacotamento Docker):
-
-| Recurso | |
+| Recurso | Como checar |
 |---|---|
-| `GET /up` | health check do Laravel (sem auth) |
-| `X-Request-Id` | toda resposta carrega um id de correlação (aceita o do cliente ou gera); volta também no corpo de erro (`request_id`) e é injetado no `Context` do log |
+| Health check | `curl -i http://localhost:8000/up` → `200` (sem auth) |
+| Índice de serviço | `curl http://localhost:8000/` → JSON com links de `docs`, `openapi`, `health` |
+| `X-Request-Id` | `curl -i http://localhost:8000/up \| grep -i x-request-id` — toda resposta carrega o id de correlação (aceita o do cliente ou gera); volta no corpo de erro como `request_id` e entra no `Context` do log |
 | Erros `problem+json` | bugs/invariantes violadas (`UnbalancedLedgerException`, exceção inesperada) → `500` genérico + `Log::critical` com contexto e `request_id`; nunca vazam detalhe interno |
-| `php artisan wallet:reconcile` | tripwire da invariante contábil — exit ≠ 0 e `Log::critical` em drift; roda a cada 15 min pelo scheduler e no CI sobre dados semeados |
-| `php artisan idempotency:prune` | remove `idempotency_keys` expiradas; agendado de hora em hora |
+| Logs ao vivo | `php artisan pail` (já incluso — `laravel/pail`) |
+| Invariante contábil | `php artisan wallet:reconcile` — exit ≠ 0 e `Log::critical` em drift; roda a cada 15 min pelo scheduler e no CI sobre dados semeados |
+| Limpeza de idempotência | `php artisan idempotency:prune` — remove `idempotency_keys` expiradas; agendado de hora em hora |
 
 Agendamento em `routes/console.php`; precisa de um `schedule:work` (ou cron) rodando.
+
+### Ainda não no repositório (Plano 4 — empacotamento Docker)
+
+Dashboards de **Pulse/Horizon** e endpoint **`/metrics` Prometheus** entram junto com a infra
+Docker de produção. Não há `/horizon`, `/pulse` nem `/metrics` neste checkout — as libs não
+estão no `composer.json` e não há rota registrada (`php artisan route:list` confirma).
 
 ---
 
@@ -329,3 +338,58 @@ php artisan schedule:work           # roda o agendamento (reconcile 15min, prune
 `pint --test` → `migrate` → `php artisan test` (suíte inteira, incl. concorrência) →
 `wallet:reconcile` sobre dados semeados → `scramble:export` (publica `openapi.json` como
 artefato). Sem gate de cobertura — coverage é gerável localmente com `php artisan test --coverage`.
+
+`.github/workflows/frontend.yml` roda em paralelo: `npm ci` → `lint` → `typecheck` → `vitest` →
+`api:types` com checagem de drift contra o `openapi.json` commitado. Os dois workflows juntos são
+os "2 jobs enxutos" do spec §14 — sem gate de cobertura em nenhum dos dois.
+
+## Frontend
+
+Next.js 15 (App Router), client-first — TypeScript, Tailwind v4, TanStack Query, `nuqs`, MSW+Vitest.
+Vive em `frontend/`, código próprio, não compartilha nada do Vite/Blade legado da raiz (mantido só
+porque o scaffold do Laravel o criou; sem uso desde que a `resources/views/welcome.blade.php` saiu).
+
+### Rodando local
+
+```bash
+# terminal 1 — backend (múltiplos workers: obrigatório)
+PHP_CLI_SERVER_WORKERS=10 php artisan serve --no-reload   # :8000
+
+# terminal 2 — frontend
+cd frontend
+cp .env.local.example .env.local
+npm install
+npm run dev          # :3000
+```
+
+> **`php artisan serve` sozinho trava o app.** O servidor embutido do PHP é single-process;
+> assim que uma sessão autenticada abre, o `RealtimeProvider` do frontend mantém uma conexão
+> SSE (`GET /api/v1/stream`) aberta o tempo todo, e essa conexão longa ocupa o único worker —
+> toda outra request (extrato, detalhe, depósito…) fica presa até dar timeout / 500.
+> `PHP_CLI_SERVER_WORKERS=10 --no-reload` forka workers e resolve. Em produção (Plano 4) o
+> runtime é FrankenPHP/Octane, que já é multi-worker por natureza.
+
+Abrir `http://localhost:3000`. O `next.config.ts` faz proxy de `/api`, `/sanctum` e `/docs` pro
+backend em `:8000` — é isso que faz o cookie de sessão do Sanctum (`SameSite=Lax`) funcionar sem
+CORS cross-origin em dev; em produção (Plano 4) o Traefik ocupa esse papel e o proxy do Next fica
+inerte (`rewrites()` só roda com `NODE_ENV=development`).
+
+### Tipos da API
+
+```bash
+php artisan scramble:export --path=openapi.json   # na raiz, com o backend presente
+cd frontend && npm run api:types                  # regenera src/shared/api/generated/api.d.ts
+```
+
+Rodar sempre que um endpoint mudar de forma; o CI (`frontend.yml`) falha se os dois saírem de sincronia.
+
+### Testes
+
+```bash
+cd frontend
+npm run test         # Vitest + Testing Library + MSW
+npm run lint
+npm run typecheck
+```
+
+Sem Playwright neste plano — E2E fica pro Plano 4 (infra Docker completa).

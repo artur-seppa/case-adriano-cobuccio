@@ -25,7 +25,13 @@ $auth = config('fortify.auth_middleware', 'auth').':'.config('fortify.guard');
 $verificationLimiter = 'throttle:'.config('fortify.limiters.verification', '6,1');
 
 // Session
-Route::post('/login', [AuthenticatedSessionController::class, 'store'])->middleware($guest)->name('login.store');
+// No `guest` middleware on login: it must always run `Auth::attempt` so wrong
+// credentials get a 422, even when a stale session cookie is present. (The
+// `guest` alias also 204s an already-authed JSON caller — see
+// App\Http\Middleware\RedirectIfAuthenticated — which on /login would make any
+// password look accepted while a session exists.) A logged-in user re-posting
+// valid credentials just re-authenticates.
+Route::post('/login', [AuthenticatedSessionController::class, 'store'])->name('login.store');
 Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])->middleware($auth)->name('logout');
 
 // Registration (creates the user + wallet via App\Actions\Fortify\CreateNewUser)
@@ -37,7 +43,7 @@ Route::post('/reset-password', [NewPasswordController::class, 'store'])->middlew
 
 // Email verification
 Route::get('/email/verify/{id}/{hash}', [VerifyEmailController::class, '__invoke'])
-    ->middleware([$auth, 'signed', $verificationLimiter])
+    ->middleware([$auth, 'signed:relative', $verificationLimiter])
     ->name('verification.verify');
 Route::post('/email/verification-notification', [EmailVerificationNotificationController::class, 'store'])
     ->middleware([$auth, $verificationLimiter])

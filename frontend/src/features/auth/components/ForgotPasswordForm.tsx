@@ -1,0 +1,54 @@
+"use client";
+
+import { FormEvent, useState } from "react";
+import { Input } from "@/shared/ui/Input";
+import { Button } from "@/shared/ui/Button";
+import { fieldError, genericErrorMessage } from "@/shared/api/fieldError";
+import { BackToLogin } from "./BackToLogin";
+import { useForgotPassword } from "../hooks/useForgotPassword";
+
+export function ForgotPasswordForm() {
+  const forgotPassword = useForgotPassword();
+  const [email, setEmail] = useState("");
+
+  if (forgotPassword.isSuccess) {
+    return (
+      <div className="flex flex-col">
+        <BackToLogin />
+        <p className="text-sm text-ink-900">
+          Se existir uma conta com esse e-mail, enviamos um link de redefinição.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <form
+      onSubmit={(event: FormEvent) => {
+        event.preventDefault();
+        forgotPassword.mutate({ email });
+      }}
+      className="flex flex-col gap-4"
+      noValidate
+    >
+      <BackToLogin />
+      <h1 className="text-xl font-semibold text-ink-900">Esqueci minha senha</h1>
+      <Input
+        label="E-mail"
+        type="email"
+        required
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        error={fieldError(forgotPassword.error, "email")}
+      />
+      {genericErrorMessage(forgotPassword.error) && (
+        <p role="alert" className="text-sm text-danger-500">
+          {genericErrorMessage(forgotPassword.error)}
+        </p>
+      )}
+      <Button type="submit" loading={forgotPassword.isPending}>
+        Enviar link
+      </Button>
+    </form>
+  );
+}

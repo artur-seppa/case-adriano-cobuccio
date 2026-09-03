@@ -8,6 +8,7 @@ use Illuminate\Http\StreamedEvent;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Redis;
 use Predis\Connection\ConnectionException;
+use Predis\TimeoutException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
@@ -72,7 +73,7 @@ class StreamController extends Controller
             while (true) {
                 try {
                     $message = $pubsub->current();
-                } catch (ConnectionException) {
+                } catch (ConnectionException|TimeoutException) {
                     $message = null; // read timeout — fall through to heartbeat/abort check
                 }
 

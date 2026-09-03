@@ -3,6 +3,7 @@
 use App\Domain\Wallet\Support\ProblemMapper;
 use App\Http\Middleware\AssignRequestId;
 use App\Http\Middleware\EnsureIdempotency;
+use App\Http\Middleware\RedirectIfAuthenticated;
 use App\Http\Middleware\SetConnectionTimeouts;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -47,6 +48,12 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->alias([
             'idempotency' => EnsureIdempotency::class,
+
+            // Symmetric fix for `redirectGuestsTo` above: stock
+            // RedirectIfAuthenticated 302s an already-authenticated JSON caller
+            // to an absolute app-home URL that the SPA's fetch then follows
+            // cross-origin and loses on CORS. Our override answers 204 for JSON.
+            'guest' => RedirectIfAuthenticated::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

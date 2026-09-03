@@ -1,6 +1,6 @@
 up:        ; docker compose up -d
 down:      ; docker compose down
-serve:     ; php artisan serve
+serve:     ; PHP_CLI_SERVER_WORKERS=10 php artisan serve --no-reload
 fresh:     ; php artisan migrate:fresh --seed
 test:      ; php artisan test
 pint:      ; ./vendor/bin/pint
