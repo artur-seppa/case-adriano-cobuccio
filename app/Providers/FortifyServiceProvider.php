@@ -10,8 +10,12 @@ use App\Http\Responses\EmailVerifiedResponse;
 use App\Http\Responses\JsonNoContentResponse;
 use App\Http\Responses\JsonRegisterResponse;
 use Illuminate\Auth\Notifications\ResetPassword;
+use Illuminate\Auth\Notifications\VerifyEmail;
 use Illuminate\Contracts\Auth\CanResetPassword;
+use Illuminate\Contracts\Auth\MustVerifyEmail;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
 use Laravel\Fortify\Contracts\LoginResponse;
 use Laravel\Fortify\Contracts\LogoutResponse;
@@ -70,6 +74,29 @@ class FortifyServiceProvider extends ServiceProvider
 
             return $frontend.'/reset-password?token='.$token
                 .'&email='.urlencode($user->getEmailForPasswordReset());
+        });
+
+        // The verification link is clicked from an email, in whatever browser the
+        // user has. If it pointed straight at the API host (`APP_URL` / the proxy
+        // target, often `127.0.0.1:8000`) the session cookie — set for `localhost`
+        // by the SPA — would not be sent to a different host, and `auth:web` on the
+        // route would 401. So build the link against the SPA origin (`frontend_url`)
+        // and let the SPA's dev/prod proxy forward `/api/email/verify/...` to the
+        // backend same-origin, cookie included. The signature is generated
+        // `absolute: false` (path + query only) so it validates regardless of which
+        // host actually terminates the request; the route uses `signed:relative`.
+        VerifyEmail::createUrlUsing(function (MustVerifyEmail $notifiable) {
+            $relative = URL::temporarySignedRoute(
+                'verification.verify',
+                Carbon::now()->addMinutes((int) config('auth.verification.expire', 60)),
+                [
+                    'id' => $notifiable->getKey(),
+                    'hash' => sha1($notifiable->getEmailForVerification()),
+                ],
+                absolute: false,
+            );
+
+            return rtrim((string) config('app.frontend_url'), '/').$relative;
         });
     }
 }
