@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Card } from "@/shared/ui/Card";
 import { Wordmark } from "@/shared/ui/Wordmark";
@@ -20,9 +20,22 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
     pathname.startsWith(path),
   );
 
+  // Only the *first* session resolution counts — this guard is for a visitor
+  // who lands here already logged in (typed the URL, hit back). A session
+  // that flips from null -> authenticated *after* that (a successful
+  // login/register submitted from this very page) must not compete with
+  // that flow's own onSuccess navigation (e.g. RegisterForm routing to
+  // /verify-email) — this stays silent once it's made its one decision.
+  const initialCheckDone = useRef(false);
+
   useEffect(() => {
-    if (shouldRedirectIfAuthenticated && session.isSuccess && session.data !== null) {
-      router.replace("/");
+    if (initialCheckDone.current || !session.isSuccess) return;
+    initialCheckDone.current = true;
+
+    if (shouldRedirectIfAuthenticated && session.data !== null) {
+      // An unverified session has no app access (see (app)/layout.tsx) — send it
+      // to the verification notice instead of bouncing through the app gate.
+      router.replace(session.data.email_verified_at === null ? "/verify-email" : "/");
     }
   }, [shouldRedirectIfAuthenticated, session.isSuccess, session.data, router]);
 
