@@ -1,0 +1,128 @@
+name: wallet
+
+# Shared build/runtime for every PHP process (app + the CP3/CP5 workers below).
+x-app-image: &app-image
+  build:
+    context: .
+    dockerfile: docker/Dockerfile
+  image: wallet-app:local
+  env_file: [.env]
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  restart: unless-stopped
+
+services:
+  # Same-origin front door. Only this and mailpit publish host ports.
+  proxy:
+    image: nginx:alpine
+    volumes:
+      - ./docker/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports: ["80:80"]
+    depends_on:
+      app:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Laravel / FrankenPHP-Octane. CMD (octane:start) comes from docker/Dockerfile.
+  app:
+    <<: *app-image
+    environment:
+      RUN_MIGRATIONS: "true"
+
+  # ---------------------------------------------------------------------------
+  # Extra PHP processes. Kept out of the stack for CP2: `horizon` / `pulse:work`
+  # do not exist until Horizon (CP3) and Pulse (CP5) are installed, so running
+  # them now would only crash-loop. Uncomment per checkpoint.
+  #
+  # habilitado na CP3 (Horizon):
+  # worker:
+  #   <<: *app-image
+  #   environment:
+  #     RUN_MIGRATIONS: "false"
+  #   depends_on:
+  #     app:
+  #       condition: service_healthy
+  #   command: ["php", "artisan", "horizon"]
+  #
+  # habilitado na CP5 (Pulse):
+  # pulse:
+  #   <<: *app-image
+  #   environment:
+  #     RUN_MIGRATIONS: "false"
+  #   depends_on:
+  #     app:
+  #       condition: service_healthy
+  #   command: ["php", "artisan", "pulse:work"]
+  #
+  # habilitado na CP3 (schedule:work acompanha a fila):
+  # scheduler:
+  #   <<: *app-image
+  #   environment:
+  #     RUN_MIGRATIONS: "false"
+  #   depends_on:
+  #     app:
+  #       condition: service_healthy
+  #   command: ["php", "artisan", "schedule:work"]
+  # ---------------------------------------------------------------------------
+
+  # Next.js standalone. API base is baked in at build time as a same-origin path.
+  # HOSTNAME=0.0.0.0 so server.js binds all interfaces: Docker otherwise sets
+  # HOSTNAME to the container id and Next binds only that name, which leaves the
+  # Dockerfile HEALTHCHECK (hits localhost:3000) failing forever.
+  web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE: /api/v1
+    image: wallet-web:local
+    environment:
+      HOSTNAME: "0.0.0.0"
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: wallet
+      POSTGRES_PASSWORD: wallet
+      POSTGRES_DB: wallet
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wallet"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  mailpit:
+    image: axllent/mailpit:latest
+    ports: ["8025:8025"]
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:
