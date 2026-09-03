@@ -9,7 +9,9 @@ use App\Domain\Wallet\DTOs\TransferData;
 use App\Domain\Wallet\Enums\ReversalReason;
 use App\Domain\Wallet\Models\Wallet;
 use App\Domain\Wallet\ValueObjects\Money;
+use App\Http\Controllers\Api\V1\StreamController;
 use App\Models\User;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Redis;
 
 /**
@@ -31,6 +33,28 @@ it('requires authentication on the stream route', function () {
     $this->getJson('/api/v1/stream')
         ->assertStatus(401)
         ->assertJsonPath('type', 'https://wallet.test/problems/unauthenticated');
+});
+
+it('lifts the request execution-time limit so a long-lived SSE stream is not capped', function () {
+    $user = User::factory()->create();
+    Wallet::factory()->forUser($user)->create();
+
+    $original = (int) ini_get('max_execution_time');
+
+    try {
+        // Stand in for FrankenPHP's REQUEST_MAX_EXECUTION_TIME (30s by default),
+        // which would otherwise kill the stream mid-connection.
+        set_time_limit(7);
+
+        $request = Request::create('/api/v1/stream', 'GET');
+        $request->setUserResolver(fn () => $user);
+
+        (new StreamController)($request);
+
+        expect((int) ini_get('max_execution_time'))->toBe(0);
+    } finally {
+        set_time_limit($original);
+    }
 });
 
 it('publishes a compact nudge to both parties on a transfer', function () {
