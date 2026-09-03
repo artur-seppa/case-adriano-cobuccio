@@ -290,16 +290,19 @@ não registra.
 
 ### Fila e agendamento
 
-- **`PublishUserEvent` é síncrono, pós-commit.** É só um `Redis::publish` barato para o SSE,
-  não vale uma fila. Envolvido em `try/catch`: Redis fora do ar não transforma um depósito que
-  **commitou** num `500`. Os listeners de e-mail/audit/métrica é que iriam para a fila (Redis +
-  Horizon, no empacotamento Docker).
+- **Três listeners nos mesmos eventos de dinheiro, responsabilidades separadas.**
+  `PublishUserEvent` (nudge de SSE), `LogBusinessEvent` (log + métrica) e `SendTransactionEmail`
+  (e-mail de transação). Todos síncronos e pós-commit; só a Notification do e-mail é que entra
+  na fila. O `PublishUserEvent` é `try/catch`: Redis fora do ar não transforma um depósito que
+  **commitou** num `500`.
 
-- **E-mail vai para a fila `mail` do Horizon.** Verificação e reset de senha são `ShouldQueue`
-  (`QueuedVerifyEmail`, `QueuedResetPassword`), drenados pelo container `worker`. `tries: 3`
-  com backoff escalonado (60s, depois 300s) no supervisor, para um `4xx` transitório de SMTP
-  (greylisting, rate limit) não queimar as tentativas em milissegundos. Estourou as 3 →
-  `failed_jobs`, visível no Horizon.
+- **E-mail vai para a fila `mail` do Horizon.** Verificação e reset de senha
+  (`QueuedVerifyEmail`, `QueuedResetPassword`) e o aviso de transação (`TransactionReceipt`,
+  disparado por `SendTransactionEmail` para o destinatário de uma transferência e para as duas
+  pontas de um estorno; depósito e o remetente de uma transferência não notificam) são
+  `ShouldQueue`, drenados pelo container `worker`. `tries: 3` com backoff escalonado (60s,
+  depois 300s) no supervisor, para um `4xx` transitório de SMTP (greylisting, rate limit) não
+  queimar as tentativas em milissegundos. Estourou as 3 → `failed_jobs`, visível no Horizon.
 
 - **Scheduler em `routes/console.php`.** `wallet:reconcile` (15 min) e `idempotency:prune`
   (horário). Precisa de um `schedule:work` (ou cron) rodando; no Docker, o container

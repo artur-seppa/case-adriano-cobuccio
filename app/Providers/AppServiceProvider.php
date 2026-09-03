@@ -7,6 +7,7 @@ use App\Domain\Wallet\Events\FundsTransferred;
 use App\Domain\Wallet\Events\TransactionReversed;
 use App\Domain\Wallet\Listeners\LogBusinessEvent;
 use App\Domain\Wallet\Listeners\PublishUserEvent;
+use App\Domain\Wallet\Listeners\SendTransactionEmail;
 use App\Redis\MultiClientRedisManager;
 use Closure;
 use Dedoc\Scramble\Scramble;
@@ -97,6 +98,11 @@ class AppServiceProvider extends ServiceProvider
         Event::listen(FundsDeposited::class, [LogBusinessEvent::class, 'handleDeposited']);
         Event::listen(FundsTransferred::class, [LogBusinessEvent::class, 'handleTransferred']);
         Event::listen(TransactionReversed::class, [LogBusinessEvent::class, 'handleReversed']);
+
+        // E-mail para quem recebe valor: destinatário de transferência, parte
+        // devolvida num estorno. Depósito e remetente não notificam.
+        Event::listen(FundsTransferred::class, [SendTransactionEmail::class, 'handleTransferred']);
+        Event::listen(TransactionReversed::class, [SendTransactionEmail::class, 'handleReversed']);
 
         Gate::define('viewPulse', function ($user = null) {
             return ! $this->app->environment('production')
