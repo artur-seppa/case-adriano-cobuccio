@@ -1,7 +1,8 @@
 <?php
 
+use Monolog\Formatter\JsonFormatter;
+use Monolog\Handler\ErrorLogHandler;
 use Monolog\Handler\NullHandler;
-use Monolog\Handler\StreamHandler;
 use Monolog\Handler\SyslogUdpHandler;
 use Monolog\Processor\PsrLogMessageProcessor;
 
@@ -97,11 +98,11 @@ return [
         'stderr' => [
             'driver' => 'monolog',
             'level' => env('LOG_LEVEL', 'debug'),
-            'handler' => StreamHandler::class,
+            'handler' => ErrorLogHandler::class,
             'handler_with' => [
-                'stream' => 'php://stderr',
+                'messageType' => 0,
             ],
-            'formatter' => env('LOG_STDERR_FORMATTER'),
+            'formatter' => JsonFormatter::class,
             'processors' => [PsrLogMessageProcessor::class],
         ],
 

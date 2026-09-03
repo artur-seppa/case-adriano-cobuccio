@@ -62,6 +62,28 @@ it('rejects an overdraw with 422 problem+json carrying available/requested', fun
     expect(Wallet::where('user_id', $bob->id)->value('balance_cents'))->toBe(0);
 });
 
+it('re-validates a repeated Idempotency-Key on a rejected transfer instead of replaying a stale error', function () {
+    [$alice] = transferPair(10000);
+    $key = (string) Str::uuid();
+    $body = ['recipient' => 'ghost@example.test', 'amount' => '1.00', 'currency' => 'BRL'];
+
+    $this->actingAs($alice, 'sanctum')
+        ->postJson('/api/v1/transfers', $body, ['Idempotency-Key' => $key])
+        ->assertStatus(422)
+        ->assertHeader('Content-Type', 'application/problem+json')
+        ->assertJsonPath('errors.recipient.0', fn ($m) => str_contains($m, 'No user'));
+
+    // Same key, same body. The first attempt did no work, so this must run
+    // validation again and answer with a fresh problem+json — not a replay
+    // served as application/json with the `errors` map dropped.
+    $this->actingAs($alice, 'sanctum')
+        ->postJson('/api/v1/transfers', $body, ['Idempotency-Key' => $key])
+        ->assertStatus(422)
+        ->assertHeader('Content-Type', 'application/problem+json')
+        ->assertHeaderMissing('Idempotency-Replayed')
+        ->assertJsonPath('errors.recipient.0', fn ($m) => str_contains($m, 'No user'));
+});
+
 it('rejects a self-transfer and an unknown recipient with 422', function () {
     [$alice] = transferPair(1000);
 

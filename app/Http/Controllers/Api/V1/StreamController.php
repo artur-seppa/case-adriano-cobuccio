@@ -29,6 +29,15 @@ class StreamController extends Controller
 
     public function __invoke(Request $request): StreamedResponse
     {
+        // This connection is meant to live for minutes, not seconds. Octane runs
+        // FrankenPHP with REQUEST_MAX_EXECUTION_TIME (config/octane.php:
+        // max_execution_time, 30s) which would otherwise sever the stream
+        // mid-flight — the browser's EventSource then reconnects and the UI
+        // flashes its "reconnecting" banner every ~30s. Lift the cap for this
+        // request only; the heartbeat + connection_aborted() checks below are
+        // what actually bound the stream's life.
+        set_time_limit(0);
+
         $userId = $request->user()->id;
         $slot = "sse:conns:{$userId}";
 

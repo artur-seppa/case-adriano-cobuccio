@@ -1,0 +1,151 @@
+name: wallet
+
+# Shared build/runtime for every PHP process (app + the CP3/CP5 workers below).
+x-app-image: &app-image
+  build:
+    context: .
+    dockerfile: docker/Dockerfile
+  image: wallet-app:local
+  env_file: [.env]
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  restart: unless-stopped
+
+services:
+  # Same-origin front door. Only this and mailpit publish host ports.
+  proxy:
+    image: nginx:alpine
+    volumes:
+      - ./docker/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    # Bound to localhost: in APP_ENV=local, viewHorizon/viewPulse/viewTelescope
+    # all return true for a guest, and Horizon shows queued mail payloads
+    # (password-reset tokens, emails) — not something to expose to the LAN by
+    # default on a financial-app demo. Drop the `127.0.0.1:` prefix to share
+    # over the network on purpose.
+    ports: ["127.0.0.1:80:80"]
+    depends_on:
+      app:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Laravel / FrankenPHP-Octane. CMD (octane:start) comes from docker/Dockerfile.
+  app:
+    <<: *app-image
+    environment:
+      RUN_MIGRATIONS: "true"
+      # Root .env defaults this to false (its outer bootstrap also gets read by
+      # host-side `php artisan` invocations, which have no ext-redis — see the
+      # comment there). This container has ext-redis (docker/Dockerfile), so
+      # Telescope is meant to actually run here.
+      TELESCOPE_ENABLED: "true"
+
+  # habilitado na CP3 (Horizon):
+  worker:
+    <<: *app-image
+    environment:
+      RUN_MIGRATIONS: "false"
+    depends_on:
+      app:
+        condition: service_healthy
+    command: ["php", "artisan", "horizon"]
+    # Overrides the image's baked-in HTTP HEALTHCHECK (`curl .../up`) — this
+    # service runs the queue worker, not the HTTP server, so that check would
+    # never pass and the container would sit "unhealthy" forever.
+    healthcheck:
+      test: ["CMD", "php", "artisan", "horizon:status"]
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 6
+
+  # habilitado na CP5 (Pulse):
+  pulse:
+    <<: *app-image
+    environment:
+      RUN_MIGRATIONS: "false"
+    depends_on:
+      app:
+        condition: service_healthy
+    command: ["php", "artisan", "pulse:work"]
+    # Same reason as `worker` above (image's HTTP HEALTHCHECK doesn't apply
+    # to a daemon process) but `pulse:work` has no status subcommand to probe
+    # with — disabled rather than faked; nothing depends on this container's
+    # health.
+    healthcheck:
+      disable: true
+
+  # habilitado na CP5 (schedule:work — carrega o pulse:check por minuto):
+  scheduler:
+    <<: *app-image
+    environment:
+      RUN_MIGRATIONS: "false"
+    depends_on:
+      app:
+        condition: service_healthy
+    command: ["php", "artisan", "schedule:work"]
+    healthcheck:
+      disable: true
+
+  # Next.js standalone. API base is baked in at build time as a same-origin path.
+  web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE: /api/v1
+    image: wallet-web:local
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: wallet
+      POSTGRES_PASSWORD: wallet
+      POSTGRES_DB: wallet
+    # Published so `php artisan test` (.env.testing -> 127.0.0.1:5442) works
+    # from the host against this stack's `wallet_test` DB — not just the
+    # app/web HTTP path proxied through :80.
+    ports: ["127.0.0.1:5442:5432"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wallet"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"]
+    # Published so `php artisan test` (.env.testing -> 127.0.0.1:6389) works
+    # from the host against this stack's Redis, matching the postgres port above.
+    ports: ["127.0.0.1:6389:6379"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  mailpit:
+    image: axllent/mailpit:latest
+    ports: ["127.0.0.1:8025:8025"]
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:

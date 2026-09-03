@@ -1,0 +1,17 @@
+.git
+.github
+node_modules
+frontend
+vendor
+storage/logs/*
+storage/framework/cache/*
+storage/framework/sessions/*
+storage/framework/views/*
+bootstrap/cache/*
+.env
+.env.*
+!.env.example
+docs
+.superpowers
+*.md
+!README.md

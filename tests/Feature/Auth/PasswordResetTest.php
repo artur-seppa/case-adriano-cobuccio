@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\User;
+use App\Notifications\QueuedResetPassword;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Support\Facades\Notification;
 
@@ -11,7 +12,7 @@ it('sends a reset link and resets the password', function () {
     $this->postJson('/api/forgot-password', ['email' => $user->email])->assertOk();
 
     $token = null;
-    Notification::assertSentTo($user, ResetPassword::class, function (ResetPassword $n) use (&$token) {
+    Notification::assertSentTo($user, QueuedResetPassword::class, function (QueuedResetPassword $n) use (&$token) {
         $token = $n->token;
 
         return true;

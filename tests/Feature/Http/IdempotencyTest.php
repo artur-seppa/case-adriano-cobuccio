@@ -104,6 +104,34 @@ it('cleans up the locked row when the handler 5xxs, so a retry can proceed', fun
     expect(DB::table('idempotency_keys')->where('key', $key)->exists())->toBeFalse();
 });
 
+it('does not cache a 4xx response — a retry re-runs the handler instead of replaying the rejection', function () {
+    $user = idemUser();
+    $key = (string) Str::uuid();
+
+    Route::middleware(['api', 'auth:sanctum', 'idempotency'])
+        ->post('/__probe/reject', function () {
+            return response()->json(['token' => (string) Str::random(24)], 422, [
+                'Content-Type' => 'application/problem+json',
+            ]);
+        });
+
+    $first = $this->actingAs($user, 'sanctum')
+        ->postJson('/__probe/reject', ['x' => 1], ['Idempotency-Key' => $key])
+        ->assertStatus(422)
+        ->assertHeader('Content-Type', 'application/problem+json')
+        ->assertHeaderMissing('Idempotency-Replayed');
+
+    $second = $this->actingAs($user, 'sanctum')
+        ->postJson('/__probe/reject', ['x' => 1], ['Idempotency-Key' => $key])
+        ->assertStatus(422)
+        ->assertHeader('Content-Type', 'application/problem+json')
+        ->assertHeaderMissing('Idempotency-Replayed');
+
+    // Re-run, not replayed: a fresh token, and no completed row left behind.
+    expect($second->json('token'))->not->toBe($first->json('token'));
+    expect(DB::table('idempotency_keys')->where('key', $key)->exists())->toBeFalse();
+});
+
 it('returns 409 while a key is still locked', function () {
     $user = idemUser();
     $key = (string) Str::uuid();

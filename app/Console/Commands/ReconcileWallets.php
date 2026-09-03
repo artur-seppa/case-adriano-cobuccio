@@ -3,9 +3,11 @@
 namespace App\Console\Commands;
 
 use App\Domain\Wallet\Services\BalanceReconciler;
+use App\Support\Metrics;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Laravel\Pulse\Facades\Pulse;
 
 class ReconcileWallets extends Command
 {
@@ -16,6 +18,10 @@ class ReconcileWallets extends Command
     public function handle(BalanceReconciler $reconciler): int
     {
         $result = $reconciler->check();
+
+        Pulse::set('reconcile_drift', 'global', (string) $result['global_balance_cents']);
+        Metrics::gauge('reconcile_drift_cents', 'Global ledger drift in cents (0 = healthy).', (float) $result['global_balance_cents']);
+        Metrics::gauge('reconcile_last_run_timestamp', 'Unix timestamp of the last reconcile run.', (float) now()->timestamp);
 
         if ($reconciler->isHealthy($result)) {
             $this->info('Reconciliation OK — no drift, global balance is zero.');

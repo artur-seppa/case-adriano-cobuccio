@@ -5,45 +5,50 @@ usuários e reversão de qualquer operação. Saldo pode ficar negativo (é um e
 todo depósito e toda transferência são estornáveis, automaticamente por inconsistência ou a
 pedido do usuário.
 
-Laravel 12 como API pura (`/api/v1`), PostgreSQL 16, Redis 7. Frontend e o empacotamento
-Docker de produção (FrankenPHP + reverse proxy) ainda não estão neste repositório.
+Laravel 12 como API pura (`/api/v1`) sobre PostgreSQL 16 e Redis 7, servida por
+FrankenPHP/Octane. O frontend Next.js 15 vive em `frontend/`. A stack Docker completa (app,
+web, nginx, Postgres, Redis, Horizon, Pulse, scheduler, Mailpit) sobe com um comando.
 
 ---
 
 ## Arquitetura
 
-**Ledger contábil double-entry.** O saldo não é um número solto numa coluna — é a soma de
+**Ledger contábil double-entry.** O saldo não é um número solto numa coluna: é a soma de
 lançamentos imutáveis (`ledger_entries`). Toda operação de dinheiro é uma `transaction` que
 gera **≥ 2 lançamentos** cujo somatório é zero (o que sai de uma carteira entra em outra).
 `wallets.balance_cents` é um cache materializado, atualizado sob lock; a verdade é
 `SUM(±ledger_entries)`. `wallet:reconcile` prova periodicamente que os dois batem e que a
 soma global é zero.
 
-**Conta-sistema `external_world`.** Depósito não tem gateway externo — é crédito interno. Para
+**Conta-sistema `external_world`.** Depósito não tem gateway externo: é crédito interno. Para
 o ledger fechar, o depósito **debita** a carteira-sistema `external_world` e credita o
 usuário. O saldo (bem negativo) dela é o total já injetado no sistema.
 
 **Dinheiro nunca é float.** `bigint` de centavos no banco, `moneyphp/money` num Value Object
 `Money` imutável na aplicação, string decimal (`"150.00"`) no payload da API. Moeda única
-`BRL` — o código valida igualdade, nunca converte.
+`BRL`: o código valida igualdade, nunca converte.
 
-**Camadas leves + Action classes.** Sem repository, sem hexagonal completo. Um `__invoke` por
-caso de uso (`DepositFunds`, `TransferFunds`, `ReverseTransaction`). Um único
-`LedgerPoster` escreve `transactions` + `ledger_entries` e muta `wallets`. Controllers são
-finos: traduzem HTTP ⇄ DTO e delegam à Action.
+**Arquitetura em camadas, domínio isolado do HTTP.** Sem repository, sem hexagonal completo:
+os models são Eloquent. Mas o domínio (`app/Domain/Wallet`) não conhece a camada de entrega:
+um teste em `tests/Arch` proíbe qualquer classe de `App\Domain\Wallet` de importar `App\Http`,
+as Actions são `final` + `__invoke` e os DTOs são `readonly`. Um `__invoke` por caso de uso
+(`DepositFunds`, `TransferFunds`, `ReverseTransaction`). Um único `LedgerPoster` escreve
+`transactions` + `ledger_entries` e muta `wallets`. Controllers são finos: traduzem HTTP ⇄ DTO
+e delegam à Action.
 
 **Autenticação por sessão** (Fortify headless + Sanctum stateful): cookie `HttpOnly` +
 CSRF, mesma origem, sem token no JavaScript, sessão revogável na hora. `personal_access_tokens`
 existe mas não é usada no fluxo atual.
 
 **Erros RFC 9457** (`application/problem+json`): contrato estável, sem vazar detalhe interno.
-Tratamento central em `bootstrap/app.php`; um `ProblemMapper` cobre cada exceção → status.
+Tratamento central em `bootstrap/app.php`; um `ProblemMapper` cobre cada exceção e a mapeia
+para um status.
 
 **IDs ULID** (`char(26)`) em todo o domínio: k-sortable e não enumeráveis nas rotas.
 
 **Tempo real por SSE** (não WebSocket): quando dinheiro se move, um listener publica um
 "nudge" compacto no canal Redis do usuário; `GET /api/v1/stream` encaminha como
-`text/event-stream`. O cliente sempre re-busca os números — o payload é só um gatilho.
+`text/event-stream`. O cliente sempre re-busca os números; o payload é só um gatilho.
 
 ### Garantias de consistência
 
@@ -51,60 +56,69 @@ Tratamento central em `bootstrap/app.php`; um `ProblemMapper` cobre cada exceç�
 |---|---|
 | Aplicação | `DB::transaction(attempts: 3)`, lock pessimista (`lockForUpdate`) nas carteiras em **ordem determinística por `id`** (evita deadlock), assert Σdébito = Σcrédito antes do commit |
 | Postgres | `CHECK` de sinal/valor/identidade, índices únicos parciais (1 estorno por transação, `idempotency_key` única), e um **`CONSTRAINT TRIGGER ... DEFERRABLE INITIALLY DEFERRED`** que rejeita no commit qualquer transação desbalanceada |
-| Idempotência | **Camada A** — middleware `EnsureIdempotency` + tabela `idempotency_keys`: replay da resposta, `409` em corrida, `422` em key reusada com corpo diferente. **Camada B** — coluna `transactions.idempotency_key` única: backstop estrutural para qualquer caller (console, fila, testes) |
-| Reconciliação | `wallet:reconcile` (comando + agendado): compara cache × ledger × último snapshot, e a soma global |
+| Idempotência | **Camada A:** middleware `EnsureIdempotency` + tabela `idempotency_keys` (replay da resposta `2xx`, `409` em corrida, `422` em key reusada com corpo diferente). **Camada B:** coluna `transactions.idempotency_key` única, backstop estrutural para qualquer caller (console, fila, testes) |
+| Reconciliação | `wallet:reconcile` (comando, agendado e no boot do container): compara cache × ledger × último snapshot, e a soma global |
 
 ---
 
-## Rodando
+## Rodando com Docker (stack completa)
 
 ```bash
-cp .env.example .env
-composer install
-docker compose up -d        # postgres (wallet + wallet_test) + redis + mailpit
-php artisan key:generate
-php artisan migrate --seed   # tabelas + carteira external_world (+ dados de demo em local)
-
-PHP_CLI_SERVER_WORKERS=10 php artisan serve --no-reload   # API em http://localhost:8000
+cp .env.example .env      # já vem pronto para o compose
+make up                   # sobe app (FrankenPHP/Octane), web (Next), nginx, postgres, redis, mailpit, worker, pulse, scheduler
 ```
 
-> Multi-worker é obrigatório se o frontend for usado junto: a conexão SSE sempre-aberta
-> (`GET /api/v1/stream`) prende o único worker do `php artisan serve` padrão e trava todo o resto.
-> Só a API, via `curl`/testes, `php artisan serve` sozinho basta.
+Abrir `http://localhost`. Usuários de demo: `make fresh` (roda o `DemoSeeder`).
 
-Com a API no ar: contrato em `http://localhost:8000/docs/api`, e um cron/worker de
-agendamento com `php artisan schedule:work` (reconcile a cada 15 min, prune de hora em hora).
-O empacotamento de produção (FrankenPHP/Octane + reverse proxy) ainda não está no repositório.
+| | |
+|---|---|
+| App | `http://localhost` |
+| Contrato da API | `http://localhost/docs/api` |
+| Health | `http://localhost/health` · `http://localhost/up` |
+| Pulse (saúde agregada) | `http://localhost/pulse` |
+| Horizon (fila) | `http://localhost/horizon` |
+| Telescope (forense, só local) | `http://localhost/telescope` |
+| Métricas Prometheus | não exposto pelo proxy público; `docker compose exec app curl localhost:8000/metrics` (rede interna) |
+| Mailpit | `http://localhost:8025` |
 
-O compose expõe Postgres em `localhost:5442`, Redis em `localhost:6389` (portas remapeadas
-para não colidir com instâncias locais) e o **Mailpit** em `localhost:8025` — os e-mails de
-verificação de conta e de reset de senha caem lá. `.env` e `.env.testing` já apontam para tudo.
+Sem TLS de propósito, para zerar o setup local. Em deploy real, TLS termina no proxy/load
+balancer; setar `SESSION_SECURE_COOKIE=true`, `APP_ENV=production` (dashboards passam a exigir
+e-mail em `HORIZON_DASHBOARD_EMAILS`, e o Telescope não carrega porque seu registro no
+`AppServiceProvider` é condicionado a `environment('local')`), e ajustar
+`SANCTUM_STATEFUL_DOMAINS`/`APP_URL` para o domínio real.
 
-O link de reset de senha aponta para o SPA (`FRONTEND_URL`, default `http://localhost:3000`) —
-`/reset-password?token=...&email=...`; sem frontend rodando, pegue o `token` da URL no Mailpit
-e chame `POST /api/reset-password` direto.
+O link de reset de senha aponta para o SPA (`FRONTEND_URL`), em
+`/reset-password?token=...&email=...`; pegue o `token` da URL no Mailpit e chame
+`POST /api/reset-password` direto se preferir sem UI.
 
-Em `APP_ENV=local`, o `--seed` também roda o **`DemoSeeder`**: 3 usuários verificados
-(`alice@wallet.test`, `bruno@wallet.test`, `carla@wallet.test`, senha `Password1234`), cada um
-com carteira financiada, 3 transferências entre eles e 1 estorno — tudo pelas Actions reais, o
-`wallet:reconcile` passa em seguida. Roda também isolado com
-`php artisan db:seed --class="Database\Seeders\DemoSeeder"`; nunca em produção.
+Em `APP_ENV=local`, o `--seed` do `make fresh` também roda o **`DemoSeeder`**: 3 usuários
+verificados (`alice@wallet.test`, `bruno@wallet.test`, `carla@wallet.test`, senha `Password1234`),
+cada um com carteira financiada, 3 transferências entre eles e 1 estorno, tudo pelas Actions
+reais, com o `wallet:reconcile` passando em seguida. Roda também isolado com
+`docker compose exec app php artisan db:seed --class="Database\Seeders\DemoSeeder"`; nunca em
+produção.
 
 ### Testes
+
+A suíte roda no **host** (não em Docker), contra o Postgres/Redis publicados pelo próprio
+`compose.yml` (`127.0.0.1:5442`/`127.0.0.1:6389`, as mesmas portas de `.env.testing`); o
+`make up` já deixa isso pronto.
 
 ```bash
 php artisan test             # unit + integração + HTTP + concorrência + arquitetura
 ./vendor/bin/pint --test     # estilo (preset Laravel)
-php artisan wallet:reconcile # invariante contábil — exit 0 saudável, 1 drift
+php artisan wallet:reconcile # invariante contábil: exit 0 saudável, 1 drift
 ```
 
-Ou via `make`: `up` · `down` · `serve` · `fresh` · `test` · `pint` · `reconcile` · `schedule` · `docs` · `routes`.
+Ou via `make`: `up` · `down` · `fresh` · `test` · `pint` · `logs` · `shell` · `dtest` ·
+`dreconcile` · `serve` · `reconcile` · `schedule` · `docs` · `routes` (os últimos cinco
+assumem um PHP local com Postgres/Redis próprios, fora do fluxo Docker documentado aqui).
 
-A suíte roda contra **PostgreSQL real** (`wallet_test`), nunca SQLite — o trigger contábil só
-dispara em commit de verdade. A suíte `tests/Concurrency` forka processos reais com `pcntl`
-(pulada se a extensão não existir) e valida, sob concorrência: ausência de duplo-gasto, corrida
-de idempotência, estorno concorrente da mesma transação, e ausência de deadlock em
-transferências cruzadas.
+A suíte usa um banco dedicado (`wallet_test`), PostgreSQL real e nunca SQLite: o trigger
+contábil só dispara num commit de verdade. `tests/Concurrency` forka processos reais com
+`pcntl` (pulada se a extensão não existir) e valida, sob concorrência, ausência de
+duplo-gasto, corrida de idempotência, estorno concorrente da mesma transação, e ausência de
+deadlock em transferências cruzadas.
 
 ---
 
@@ -114,7 +128,7 @@ Base `/api/v1`, JSON only, atrás de `auth:sanctum`. Escritas de dinheiro exigem
 `Idempotency-Key: <uuid>` (ausência → `400`) e passam por `verified` + rate limit. Toda
 resposta carrega `X-Request-Id`. `GET /` devolve um índice JSON com os links de docs/health.
 
-Auth é por **sessão** (cookie `HttpOnly` do Sanctum, mesma origem) — não é bearer token. Toda
+Auth é por **sessão** (cookie `HttpOnly` do Sanctum, mesma origem), não bearer token. Toda
 rota de escrita (auth **e** dinheiro) é CSRF-protected. Para testar via `curl`/Postman:
 
 ```bash
@@ -128,7 +142,7 @@ Sem isso → `419 CSRF token mismatch`. No `/docs/api` (Stoplight) o "Try it" j�
 |---|---|
 | `POST /api/register` · `/login` · `/logout` · `/forgot-password` · `/reset-password` | Fortify, sob `/api` (sessão) |
 | `GET /api/v1/wallet` | saldo e moeda |
-| `GET /api/v1/wallet/statement` | extrato — `ledger_entries`, paginado por cursor via `sequence` |
+| `GET /api/v1/wallet/statement` | extrato: `ledger_entries`, paginado por cursor via `sequence` |
 | `GET /api/v1/wallet/sessions` · `DELETE /api/v1/wallet/sessions/{id}` | sessões ativas / "sair de outro dispositivo" |
 | `GET /api/v1/transactions` | filtros `type`, `direction=in\|out`, `from`, `to`, `status`; cursor |
 | `GET /api/v1/transactions/{id}` | detalhe + linkagem de estorno |
@@ -146,9 +160,9 @@ IP+email · stream 12/min. Estouro → `429` + header `Retry-After`, corpo `prob
 |---|---|
 | `GET /docs/api` | UI interativa (Scramble) |
 | `GET /docs/api.json` | documento OpenAPI 3.1 cru |
-| `php artisan scramble:export --path=openapi.json` | exporta o mesmo documento pra arquivo |
+| `php artisan scramble:export --path=openapi.json` | exporta o mesmo documento para arquivo |
 
-O contrato é derivado **mecanicamente** dos Form Requests e Resources — não há anotação a
+O contrato é derivado **mecanicamente** dos Form Requests e Resources; não há anotação a
 manter em dia. Os endpoints são agrupados em seções na UI (Autenticação, Carteira, Transações,
 Depósitos, Transferências, Estornos, Sessões, Tempo real). Fora de `local`, `/docs/*` fica
 atrás do gate `viewApiDocs`.
@@ -159,21 +173,24 @@ atrás do gate `viewApiDocs`.
 
 | Recurso | Como checar |
 |---|---|
-| Health check | `curl -i http://localhost:8000/up` → `200` (sem auth) |
-| Índice de serviço | `curl http://localhost:8000/` → JSON com links de `docs`, `openapi`, `health` |
-| `X-Request-Id` | `curl -i http://localhost:8000/up \| grep -i x-request-id` — toda resposta carrega o id de correlação (aceita o do cliente ou gera); volta no corpo de erro como `request_id` e entra no `Context` do log |
+| Health check | `curl -i http://localhost/health` → `200 {"status":"ok","db":"ok","redis":"ok"}` (503 se algum componente cair); `http://localhost/up` é o smoke-check nativo do Laravel |
+| Índice de serviço | `curl http://localhost/` → JSON com links de `docs`, `openapi`, `health` |
+| `X-Request-Id` | `curl -i http://localhost/up \| grep -i x-request-id`. Toda resposta carrega o id de correlação (aceita o do cliente ou gera); volta no corpo de erro como `request_id`, lido do `Context` (per-request sob Octane, nunca do container) |
+| Logs estruturados | JSON de uma linha por entrada em `stderr` (`LOG_CHANNEL=stderr`, `docker compose logs app`). Inclui `request.completed` por request e os eventos de negócio (`funds.deposited`, `funds.transferred`, `transaction.reversed`) |
 | Erros `problem+json` | bugs/invariantes violadas (`UnbalancedLedgerException`, exceção inesperada) → `500` genérico + `Log::critical` com contexto e `request_id`; nunca vazam detalhe interno |
-| Logs ao vivo | `php artisan pail` (já incluso — `laravel/pail`) |
-| Invariante contábil | `php artisan wallet:reconcile` — exit ≠ 0 e `Log::critical` em drift; roda a cada 15 min pelo scheduler e no CI sobre dados semeados |
-| Limpeza de idempotência | `php artisan idempotency:prune` — remove `idempotency_keys` expiradas; agendado de hora em hora |
+| **Pulse** | `http://localhost/pulse`: saúde agregada (requests, jobs, exceptions, drift do reconcile via `Pulse::set`) |
+| **Horizon** | `http://localhost/horizon`: fila Redis (`mail`/`default`), jobs recentes, throughput |
+| **Telescope** (só `local`) | `http://localhost/telescope`: requests, queries, jobs, eventos, cache; nunca registra fora de `environment('local')` |
+| **`/metrics`** (Prometheus) | `docker compose exec app curl localhost:8000/metrics`. Não exposto pelo nginx público de propósito (o NAT do Docker faz o host aparecer como o gateway da bridge, dentro de qualquer allowlist de CIDR "interno" sensata; um Prometheus real entra na rede `wallet` e faz scrape de `app:8000/metrics` direto). 9 séries: `wallet_transactions_total`, `wallet_transaction_amount_cents`, `wallet_reversals_total`, `wallet_reconcile_drift_cents`, `wallet_reconcile_last_run_timestamp`, `wallet_insufficient_funds_total`, `wallet_idempotency_replays_total`, `wallet_http_server_request_duration_seconds`, `wallet_sse_active_connections` |
+| Invariante contábil | `php artisan wallet:reconcile`: exit ≠ 0 e `Log::critical` em drift. Roda no boot do container `app`, a cada 15 min pelo scheduler, e no CI sobre dados semeados |
+| Limpeza de idempotência | `php artisan idempotency:prune`: remove `idempotency_keys` expiradas; agendado de hora em hora |
 
-Agendamento em `routes/console.php`; precisa de um `schedule:work` (ou cron) rodando.
+Agendamento em `routes/console.php` (`reconcile` 15min, `prune` 1h, `pulse:check` 1min); no
+Docker, o serviço `scheduler` (`schedule:work`) cuida disso.
 
-### Ainda não no repositório (Plano 4 — empacotamento Docker)
-
-Dashboards de **Pulse/Horizon** e endpoint **`/metrics` Prometheus** entram junto com a infra
-Docker de produção. Não há `/horizon`, `/pulse` nem `/metrics` neste checkout — as libs não
-estão no `composer.json` e não há rota registrada (`php artisan route:list` confirma).
+Dashboards abrem sem allowlist em `APP_ENV=local` (a stack Docker default). Em produção real:
+`viewHorizon`/`viewPulse` exigem e-mail em `HORIZON_DASHBOARD_EMAILS`, e Telescope simplesmente
+não registra.
 
 ---
 
@@ -184,24 +201,24 @@ estão no `composer.json` e não há rota registrada (`php artisan route:list` c
 - **Dinheiro é `bigint` de centavos, nunca float.** Coluna `bigint` **signed** no Postgres (a
   carteira precisa de saldo negativo), Value Object `Money` imutável (`moneyphp/money`) na
   aplicação, string decimal (`"150.00"`) no payload. Aritmética sempre inteira; moeda única
-  `BRL` — o código valida igualdade, nunca converte. Até a regra `AsMoney` checa `> 0` por
-  regex, sem `(float)`.
+  `BRL`, com o código validando igualdade, nunca convertendo. Até a regra `AsMoney` checa
+  `> 0` por regex, sem `(float)`.
 
-- **PKs ULID (`char(26)`).** K-sortable como um auto-increment (bom pra localidade de índice),
-  mas não enumerável nas rotas — não dá pra chutar `/transactions/5`. Gera o id antes do
-  insert, sem round-trip.
+- **PKs ULID (`char(26)`).** K-sortable como um auto-increment (bom para localidade de
+  índice), mas não enumerável nas rotas: não dá para chutar `/transactions/5`. Gera o id antes
+  do insert, sem round-trip.
 
 - **`transactions` e `ledger_entries` são append-only.** A aplicação **nunca** faz
   `UPDATE`/`DELETE` nelas. Estorno é uma transação **nova** do tipo `reversal`, com lançamentos
   espelhados, ligada à original por `reversal_of_transaction_id`. Só `wallets.balance_cents` e
   `entry_count` são mutáveis.
 
-- **`sequence` — contador monotônico por carteira** nos lançamentos (`UNIQUE (wallet_id,
+- **`sequence`: contador monotônico por carteira** nos lançamentos (`UNIQUE (wallet_id,
   sequence)`, sem buraco). Dá ordem determinística mesmo com timestamps empatados, torna o
   `balance_after` inequívoco e é a âncora da paginação por cursor do extrato.
 
 - **`balance_after_cents` gravado em cada lançamento.** O extrato mostra saldo corrente sem
-  recomputar, e a reconciliação vira O(1) (compara o último snapshot com o cache).
+  recomputar, e a checagem rápida da reconciliação (snapshot × cache) vira O(1).
 
 - **Conta-sistema `external_world`.** Depósito não tem gateway externo: debita essa carteira,
   credita o usuário. O saldo (bem negativo) dela = total já injetado no sistema. É o que faz o
@@ -211,92 +228,159 @@ estão no `composer.json` e não há rota registrada (`php artisan route:list` c
 
 - **Lock pessimista com ordem determinística.** `SELECT … FOR UPDATE` nas linhas das carteiras
   envolvidas, **sempre** ordenadas por `id` ascendente. Transfer A→B e B→A concorrentes pegam
-  os locks na mesma ordem → sem deadlock. Otimista (versão + retry) foi descartado: carteira
-  popular geraria retry demais.
+  os locks na mesma ordem, logo sem deadlock. Otimista (versão + retry) foi descartado:
+  carteira popular geraria retry demais.
 
 - **`DB::transaction(attempts: 3)`.** Deadlock (`40P01`) e serialization failure (`40001`)
   reexecutam a closure com backoff + jitter. Esgotou → `503` + `Retry-After`. Efeito externo
   (Redis, e-mail) **fora** da closure, sempre pós-commit (`DB::afterCommit`).
 
 - **Trigger contábil deferido.** `CONSTRAINT TRIGGER … DEFERRABLE INITIALLY DEFERRED` roda a
-  checagem Σdébito = Σcrédito **no commit** — os lançamentos podem entrar em qualquer ordem
-  dentro da transação. A aplicação também faz o assert antes (mensagem melhor, falha mais
+  checagem Σdébito = Σcrédito **no commit**, então os lançamentos podem entrar em qualquer
+  ordem dentro da transação. A aplicação também faz o assert antes (mensagem melhor, falha mais
   cedo); o trigger é o backstop que torna um ledger desbalanceado impossível de persistir.
 
 - **Isolamento `READ COMMITTED`** (default do Postgres). Suficiente porque o lock pessimista é
-  explícito — sem `REPEATABLE READ`/`SERIALIZABLE`.
+  explícito; sem `REPEATABLE READ`/`SERIALIZABLE`.
 
 - **Timeouts por request.** `SET lock_timeout='3s'` / `statement_timeout='5s'` só nos guards
-  `web`/`api` (nunca console/fila — migration e reconcile precisam de mais). Reaplicado a cada
-  request → seguro sob Octane.
+  `web`/`api` (nunca console/fila, porque migration e reconcile precisam de mais). Reaplicado a
+  cada request, seguro sob Octane.
 
 - **Idempotência em duas camadas.** Middleware `EnsureIdempotency` + tabela `idempotency_keys`
   (grava a resposta e faz replay; `409` em corrida, `422` em key reusada com corpo diferente,
   `400` sem header) sobre um `UNIQUE` em `transactions.idempotency_key` (backstop estrutural
-  pra qualquer caller — console, fila, teste). A escrita em `idempotency_keys` é transação
-  curta própria: linha `locked` antes do trabalho, `completed` com corpo+status+`transaction_id`
-  ao fim, apagada se a Action lançar ou der `5xx` (o cliente reusa a mesma key).
+  para qualquer caller: console, fila, teste). A escrita em `idempotency_keys` é transação
+  curta própria: linha `locked` antes do trabalho; ao fim, só uma resposta **2xx** vira
+  `completed` (com corpo, status e `transaction_id`) e passa a ser replayada. Qualquer outra
+  coisa (a Action lançou, `4xx` de validação, `5xx`) apaga a linha, para um retry na mesma key
+  rodar de novo do zero em vez de fossilizar uma rejeição obsoleta com o `request_id` errado.
 
 ### Reconciliação
 
-- **`wallet:reconcile` prova três representações do saldo.** `balance_cents` (cache) ==
-  `SUM(±ledger_entries)` (a verdade) == `balance_after_cents` do lançamento de maior `sequence`
-  (snapshot), e `SUM(todas wallets.balance_cents) == 0` (soma global zero do double-entry).
-  Roda a cada 15 min pelo scheduler e no CI sobre dados semeados; exit ≠ 0 e `Log::critical` em
-  drift. `--fix` reescreve o cache a partir do ledger (manual — humano decide).
+- **`wallet:reconcile` prova quatro coisas sobre o saldo.** Para cada carteira, `balance_cents`
+  (o cache lido pela API) == `SUM(±ledger_entries)` (a verdade, recalculada do zero) ==
+  `balance_after_cents` do lançamento de maior `sequence` (o snapshot gravado no posting). E,
+  globalmente, `SUM(todas wallets.balance_cents) == 0` (o double-entry fecha em zero, contando
+  a `external_world`).
+
+- **Cada comparação pega uma falha diferente.** Cache × verdade denuncia um `balance_cents`
+  que não foi atualizado (ou foi pela metade) sob lock. Verdade × snapshot denuncia um
+  `balance_after_cents` escrito errado ou um `sequence` fora de ordem. Soma global ≠ 0 denuncia
+  uma transação que persistiu com pernas desbalanceadas, algo que o trigger deferido deveria
+  impedir: a reconciliação é a checagem independente que não confia no trigger.
+
+- **Custo.** A varredura recalcula o `SUM` de cada carteira (chunk de 500), então é O(número
+  de lançamentos), não O(1). Roda fora do caminho de request, no `scheduler`.
+
+- **Quando roda.** No boot do container `app` (uma passada logo após migrate/seed, para o
+  `docker compose logs app` já mostrar a invariante de pé), a cada 15 min pelo `scheduler`, e
+  no CI sobre os dados do `DemoSeeder`.
+
+- **O que faz com um drift.** `Log::critical('wallet.reconcile.drift', …)` com o payload
+  completo, move o gauge `wallet_reconcile_drift_cents`, atualiza `Pulse::set`, e sai com
+  código ≠ 0. Não toma ação corretiva sozinho: `--fix` (manual) reescreve o cache a partir do
+  ledger, e existe assim de propósito, porque consertar automático mascararia a causa raiz.
+
+- **Ponto cego conhecido.** O gauge exporta a soma global, então um alerta em
+  `wallet_reconcile_drift_cents != 0` pega o caso comum mas não um drift compensado (carteira A
+  +100, carteira B −100, soma global ainda 0). Esse só aparece na comparação por carteira, no
+  `Log::critical` e no exit code; um gauge de contagem de carteiras divergentes fecharia a
+  lacuna.
 
 ### Fila e agendamento
 
-- **`PublishUserEvent` é síncrono, pós-commit.** É só um `Redis::publish` barato pro SSE — não
-  vale uma fila. Envolvido em `try/catch`: Redis fora do ar não transforma um depósito que
-  **commitou** num `500`. Os listeners de e-mail/audit/métrica é que iriam pra fila (Redis +
-  Horizon, no empacotamento Docker).
+- **Três listeners nos mesmos eventos de dinheiro, responsabilidades separadas.**
+  `PublishUserEvent` (nudge de SSE), `LogBusinessEvent` (log + métrica) e `SendTransactionEmail`
+  (e-mail de transação). Todos síncronos e pós-commit; só a Notification do e-mail é que entra
+  na fila. O `PublishUserEvent` é `try/catch`: Redis fora do ar não transforma um depósito que
+  **commitou** num `500`.
+
+- **E-mail vai para a fila `mail` do Horizon.** Verificação e reset de senha
+  (`QueuedVerifyEmail`, `QueuedResetPassword`) e o aviso de transação (`TransactionReceipt`,
+  disparado por `SendTransactionEmail` para o destinatário de uma transferência e para as duas
+  pontas de um estorno; depósito e o remetente de uma transferência não notificam) são
+  `ShouldQueue`, drenados pelo container `worker`. `tries: 3` com backoff escalonado (60s,
+  depois 300s) no supervisor, para um `4xx` transitório de SMTP (greylisting, rate limit) não
+  queimar as tentativas em milissegundos. Estourou as 3 → `failed_jobs`, visível no Horizon.
 
 - **Scheduler em `routes/console.php`.** `wallet:reconcile` (15 min) e `idempotency:prune`
-  (horário). Precisa de um `schedule:work` (ou cron) rodando.
+  (horário). Precisa de um `schedule:work` (ou cron) rodando; no Docker, o container
+  `scheduler`.
+
+### Tempo real (SSE)
+
+- **Um generator PHP segura a conexão.** `GET /api/v1/stream` faz `SUBSCRIBE` no canal
+  `user-events:{id}` (o id vem da sessão, nunca de query param) e encaminha cada nudge como
+  frame SSE. O `pubSubLoop` do `predis` usa um `read_write_timeout` curto (5s), então o loop
+  acorda de tempos em tempos para checar `connection_aborted()` e mandar um heartbeat (`event:
+  ping`) a cada 20s.
+
+- **`set_time_limit(0)` no controller.** O Octane roda o FrankenPHP com
+  `REQUEST_MAX_EXECUTION_TIME` (30s, de `config/octane.php`), que cortaria a conexão SSE a cada
+  30s e faria o `EventSource` do browser ficar religando. O controller zera esse limite só para
+  essa request; o heartbeat e o `connection_aborted()` são o que de fato limitam a vida do
+  stream.
+
+- **No máximo 3 streams simultâneos por usuário.** Um contador em cache (`Cache::add` +
+  `Cache::increment`, TTL de 900s) barra o 4º com `429`. Liberado no `finally` do generator,
+  com `register_shutdown_function` como rede para um timeout/fatal que pule o `finally`.
+
+- **O cliente não pisca a cada reconexão.** O `EventSource` cai e reconecta como rotina (worker
+  reciclado, blip de rede) e se cura em poucos segundos. O banner "Reconectando" só aparece se
+  a queda passar de ~2,5s; a escalada para "sem conexão" continua em 15s.
 
 ### API e HTTP
 
-- **Paginação por cursor.** O extrato (`/wallet/statement`) pagina por `sequence` desc — não
-  offset. `WHERE sequence < :ultimo ORDER BY sequence DESC LIMIT n` bate direto no índice,
-  O(1) por página, e é estável sob inserção concorrente (lançamento novo entra no topo, nunca
-  desloca as páginas). `/transactions` usa o mesmo esquema com `(created_at, id)`. Sem `total`
-  — o trade-off do cursor.
+- **Paginação por cursor.** O extrato (`/wallet/statement`) pagina por `sequence` desc, não
+  offset. `WHERE sequence < :ultimo ORDER BY sequence DESC LIMIT n` bate direto no índice, O(1)
+  por página, e é estável sob inserção concorrente (lançamento novo entra no topo, nunca
+  desloca as páginas). `/transactions` usa o mesmo esquema com `(created_at, id)`. Sem `total`,
+  que é o trade-off do cursor.
 
 - **Erros RFC 9457 (`application/problem+json`).** Um `ProblemMapper` central mapeia cada
-  exceção → status, com `type` URI estável. Bug/invariante violada → `500` genérico +
+  exceção para um status, com `type` URI estável. Bug/invariante violada → `500` genérico +
   `Log::critical` com contexto e `request_id`; nunca vaza detalhe interno. Idempotência
   (400/409/422) responde direto no middleware.
 
-- **`X-Request-Id` em toda resposta** (inclusive erro). `AssignRequestId` é **global** — o spec
+- **`X-Request-Id` em toda resposta** (inclusive erro). `AssignRequestId` é **global**: o spec
   exige o header até no `/up`, que não passa por grupo de middleware. O id volta no corpo do
   erro (`request_id`) e entra no `Context` do log.
 
 - **`isReversed()` prefere a relação eager-loaded.** "Está estornada?" = existe transação com
-  `reversal_of_transaction_id` apontando pra ela. Em listagem seria N+1; o método usa a relação
-  carregada quando disponível, só cai pra `->exists()` fora de contexto de lista.
+  `reversal_of_transaction_id` apontando para ela. Em listagem seria N+1; o método usa a
+  relação carregada quando disponível, só cai para `->exists()` fora de contexto de lista.
 
 - **Política de estorno é só posse.** `TransactionPolicy::reverse` checa só
   `initiator_id === user->id`. "Já estornada" (`409`) e "estorno de estorno" (`422`) são regra
-  de negócio revalidada sob lock pela Action — voltam como erro de domínio, não um `403`
+  de negócio revalidada sob lock pela Action; voltam como erro de domínio, não um `403`
   genérico. Quem **recebeu** uma transferência não a estorna (não é o iniciador).
 
 - **Rotas do Fortify curadas.** `Fortify::ignoreRoutes()` + um `routes/fortify.php` que declara
-  exatamente os 9 endpoints de auth em uso — sem as rotas mortas de password-confirm, 2FA e
+  exatamente os 9 endpoints de auth em uso, sem as rotas mortas de password-confirm, 2FA e
   passkey que o Fortify registra por padrão.
 
 ### Testes
 
-- **`DatabaseTruncation`, não `RefreshDatabase`, no que toca dinheiro.** `RefreshDatabase`
-  embrulha cada teste numa transação que nunca commita — o trigger contábil (dispara no commit)
-  e os eventos `DB::afterCommit` ficariam mudos.
+- **Banco de teste dedicado, PostgreSQL real.** `wallet_test` (`.env.testing`), nunca SQLite:
+  o trigger contábil e os hooks `DB::afterCommit` só disparam num commit de verdade. O que toca
+  dinheiro usa `DatabaseTruncation`, não `RefreshDatabase` (que embrulha cada teste numa
+  transação sem commit, deixando trigger e eventos mudos).
+
+- **Factories montam o estado.** `User::factory()`, `Wallet::factory()->forUser()` e helpers
+  como `transferPair()` (factory + `DepositFunds` real para financiar a carteira) compõem o
+  cenário; os testes batem nas Actions e rotas reais, não em stubs.
+
+- **Mock só na borda.** No backend quase não há: `Notification::fake()` nos testes de e-mail e
+  `Redis::shouldReceive('publish')` num teste de stream. O `PublishUserEvent` publica de
+  verdade (cliente `predis` contra o Redis do compose); sem Redis no ar, os testes de HTTP
+  quebram. No frontend, o MSW intercepta o `fetch` na camada de rede com respostas HTTP reais
+  (status, headers, corpo `problem+json`), então `apiFetch` e o TanStack Query rodam de
+  verdade.
 
 - **Concorrência testada de verdade.** `tests/Concurrency` forka K processos, cada um com
   conexão própria, contra o Postgres real. É o que dá confiança de que o lock ordenado e a
-  idempotência seguram sob corrida — não dá pra provar isso com mock.
-
-- **Redis real nos testes.** `PublishUserEvent` publica de verdade (cliente `predis` contra o
-  Redis do compose); sem Redis no ar, os testes de HTTP quebram.
+  idempotência seguram sob corrida; não dá para provar isso com mock.
 
 ---
 
@@ -334,28 +418,47 @@ php artisan schedule:work           # roda o agendamento (reconcile 15min, prune
 
 ## CI
 
-`.github/workflows/backend.yml` sobe Postgres 16 + Redis 7 como service containers e roda:
-`pint --test` → `migrate` → `php artisan test` (suíte inteira, incl. concorrência) →
-`wallet:reconcile` sobre dados semeados → `scramble:export` (publica `openapi.json` como
-artefato). Sem gate de cobertura — coverage é gerável localmente com `php artisan test --coverage`.
+`.github/workflows/backend.yml` sobe Postgres 16 + Redis 7 como service containers e roda, em
+ordem: `pint --test`, `migrate`, `php artisan test` (suíte inteira, incl. concorrência),
+`wallet:reconcile` sobre dados semeados, e `scramble:export` (publica `openapi.json` como
+artefato). Sem gate de cobertura; coverage é gerável localmente com
+`php artisan test --coverage`.
 
-`.github/workflows/frontend.yml` roda em paralelo: `npm ci` → `lint` → `typecheck` → `vitest` →
-`api:types` com checagem de drift contra o `openapi.json` commitado. Os dois workflows juntos são
-os "2 jobs enxutos" do spec §14 — sem gate de cobertura em nenhum dos dois.
+`.github/workflows/frontend.yml` roda em paralelo: `npm ci`, `lint`, `typecheck`, `vitest`, e
+`api:types` com checagem de drift contra o `openapi.json` commitado. Os dois workflows juntos
+são os "2 jobs enxutos" do spec §14; sem gate de cobertura em nenhum dos dois.
 
 ## Frontend
 
-Next.js 15 (App Router), client-first — TypeScript, Tailwind v4, TanStack Query, `nuqs`, MSW+Vitest.
-Vive em `frontend/`, código próprio, não compartilha nada do Vite/Blade legado da raiz (mantido só
-porque o scaffold do Laravel o criou; sem uso desde que a `resources/views/welcome.blade.php` saiu).
+Next.js 15 (App Router), client-first: TypeScript, Tailwind v4, TanStack Query, `nuqs`,
+MSW+Vitest. Organização feature-based: cada feature em `src/features/<nome>/` com seu próprio
+`api/`, `hooks/` e `components/`; o transversal (cliente HTTP, `queryClient`, UI, realtime)
+fica em `src/shared/`, e `src/app/` é só o roteamento do Next. Vive em `frontend/`, código
+próprio, não compartilha nada do Vite/Blade legado da raiz (mantido só porque o scaffold do
+Laravel o criou; sem uso desde que a `resources/views/welcome.blade.php` saiu).
+
+### Cache e frescor
+
+O `QueryClient` default só fixa política de retry (não retenta um `ApiError`, senão até 2x) e
+`refetchOnWindowFocus: false`. O `staleTime` é por query, calibrado ao recurso:
+
+- `useWallet`: `staleTime` 60s, `gcTime` 5min, `refetchOnWindowFocus: true`, e
+  `refetchInterval` de 30s **só quando o SSE está `down`** (polling é o fallback, não o caminho
+  normal).
+- `useSession`: `staleTime: Infinity`; a sessão só é revalidada por invalidação explícita
+  (login, logout, registro).
+- `useRecentTransactions`: `staleTime` 30s.
+
+O frescor de verdade vem do SSE: quando dinheiro se move, o `RealtimeProvider` invalida
+`['wallet']` e `['transactions']`. O `staleTime` é o backstop para quando o stream cai.
 
 ### Rodando local
 
 ```bash
-# terminal 1 — backend (múltiplos workers: obrigatório)
+# terminal 1: backend (múltiplos workers: obrigatório)
 PHP_CLI_SERVER_WORKERS=10 php artisan serve --no-reload   # :8000
 
-# terminal 2 — frontend
+# terminal 2: frontend
 cd frontend
 cp .env.local.example .env.local
 npm install
@@ -364,15 +467,15 @@ npm run dev          # :3000
 
 > **`php artisan serve` sozinho trava o app.** O servidor embutido do PHP é single-process;
 > assim que uma sessão autenticada abre, o `RealtimeProvider` do frontend mantém uma conexão
-> SSE (`GET /api/v1/stream`) aberta o tempo todo, e essa conexão longa ocupa o único worker —
-> toda outra request (extrato, detalhe, depósito…) fica presa até dar timeout / 500.
-> `PHP_CLI_SERVER_WORKERS=10 --no-reload` forka workers e resolve. Em produção (Plano 4) o
-> runtime é FrankenPHP/Octane, que já é multi-worker por natureza.
+> SSE (`GET /api/v1/stream`) aberta o tempo todo, e essa conexão longa ocupa o único worker,
+> então toda outra request (extrato, detalhe, depósito…) fica presa até dar timeout / 500.
+> `PHP_CLI_SERVER_WORKERS=10 --no-reload` forka workers e resolve. Na stack Docker o runtime é
+> FrankenPHP/Octane, multi-worker por natureza, então o problema não existe lá.
 
-Abrir `http://localhost:3000`. O `next.config.ts` faz proxy de `/api`, `/sanctum` e `/docs` pro
-backend em `:8000` — é isso que faz o cookie de sessão do Sanctum (`SameSite=Lax`) funcionar sem
-CORS cross-origin em dev; em produção (Plano 4) o Traefik ocupa esse papel e o proxy do Next fica
-inerte (`rewrites()` só roda com `NODE_ENV=development`).
+Abrir `http://localhost:3000`. O `next.config.ts` faz proxy de `/api`, `/sanctum` e `/docs`
+para o backend em `:8000`; é isso que faz o cookie de sessão do Sanctum (`SameSite=Lax`)
+funcionar sem CORS cross-origin em dev. Na stack Docker o nginx ocupa esse papel e o proxy do
+Next fica inerte (`rewrites()` só roda com `NODE_ENV=development`).
 
 ### Tipos da API
 
@@ -381,7 +484,8 @@ php artisan scramble:export --path=openapi.json   # na raiz, com o backend prese
 cd frontend && npm run api:types                  # regenera src/shared/api/generated/api.d.ts
 ```
 
-Rodar sempre que um endpoint mudar de forma; o CI (`frontend.yml`) falha se os dois saírem de sincronia.
+Rodar sempre que um endpoint mudar de forma; o CI (`frontend.yml`) falha se os dois saírem de
+sincronia.
 
 ### Testes
 
@@ -392,4 +496,6 @@ npm run lint
 npm run typecheck
 ```
 
-Sem Playwright neste plano — E2E fica pro Plano 4 (infra Docker completa).
+Vitest + Testing Library nos componentes e hooks, com o MSW mockando o HTTP na borda (handlers
+padrão em `src/shared/testing/`, cada teste sobrescreve o que precisa). Não há E2E de browser;
+a cobertura para no nível de componente.

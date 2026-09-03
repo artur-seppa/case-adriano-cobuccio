@@ -7,10 +7,19 @@ import { createQueryClient } from "@/shared/query/queryClient";
 import { ToastProvider } from "@/shared/ui/Toast";
 import AppLayout from "../layout";
 
+const replace = vi.fn();
+
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  useRouter: () => ({ push: vi.fn(), replace }),
   usePathname: () => "/",
 }));
+
+const VERIFIED_USER = {
+  id: "u1",
+  name: "Ana Souza",
+  email: "ana@example.test",
+  email_verified_at: "2026-01-01T00:00:00+00:00",
+};
 
 // jsdom has no EventSource — the success branch mounts <RealtimeProvider>, which opens one.
 class StubEventSource {
@@ -22,6 +31,7 @@ class StubEventSource {
 }
 
 beforeEach(() => {
+  replace.mockClear();
   // @ts-expect-error test double
   global.EventSource = StubEventSource;
 });
@@ -55,13 +65,26 @@ it("shows a retry state, not an infinite skeleton, when the session check errors
   expect(await screen.findByText("Não foi possível verificar sua sessão.")).toBeInTheDocument();
   expect(screen.queryByText("conteúdo protegido")).not.toBeInTheDocument();
 
+  server.use(http.get("/api/user", () => HttpResponse.json(VERIFIED_USER)));
+
+  await userEvent.click(screen.getByRole("button", { name: "Tentar de novo" }));
+
+  expect(await screen.findByText("conteúdo protegido")).toBeInTheDocument();
+});
+
+it("redirects an authenticated but unverified user to /verify-email and does not render protected content", async () => {
   server.use(
     http.get("/api/user", () =>
       HttpResponse.json({ id: "u1", name: "Ana Souza", email: "ana@example.test", email_verified_at: null }),
     ),
   );
 
-  await userEvent.click(screen.getByRole("button", { name: "Tentar de novo" }));
+  renderWithClient(
+    <AppLayout>
+      <p>conteúdo protegido</p>
+    </AppLayout>,
+  );
 
-  expect(await screen.findByText("conteúdo protegido")).toBeInTheDocument();
+  await vi.waitFor(() => expect(replace).toHaveBeenCalledWith("/verify-email"));
+  expect(screen.queryByText("conteúdo protegido")).not.toBeInTheDocument();
 });

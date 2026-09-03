@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use App\Domain\Wallet\Support\CanonicalJson;
 use App\Domain\Wallet\Support\ProblemDetails;
+use App\Support\Metrics;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -56,7 +57,12 @@ class EnsureIdempotency
             throw $e;
         }
 
-        if ($response->getStatusCode() >= 500) {
+        // Only a 2xx is worth replaying: it means the write actually happened and
+        // a retry must not repeat it. A 4xx (validation, conflict) or 5xx did no
+        // work — recording it would fossilise a stale rejection (wrong request_id,
+        // and replayed as plain application/json without its problem+json body),
+        // and block a corrected retry on the same key. Drop the lock, let it re-run.
+        if ($response->getStatusCode() >= 300) {
             DB::table('idempotency_keys')->where('key', $key)->where('status', 'locked')->delete();
 
             return $response;
@@ -107,6 +113,8 @@ class EnsureIdempotency
                 'This Idempotency-Key was already used with different request parameters.',
             );
         }
+
+        Metrics::counter('idempotency_replays_total', 'Requests served from a replayed idempotent response.', [], []);
 
         return response($row->response_body, $row->response_status)
             ->header('Content-Type', 'application/json')

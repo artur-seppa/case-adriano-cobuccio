@@ -17,7 +17,9 @@ export function RegisterForm() {
     event.preventDefault();
     registerMutation.mutate(form, {
       onSuccess: (data) => {
-        router.push(data.requires_email_verification ? "/verify-email" : "/");
+        // replace, not push: the account exists now, so the back button must not
+        // return to a pre-filled "create account" form.
+        router.replace(data.requires_email_verification ? "/verify-email" : "/");
       },
     });
   }

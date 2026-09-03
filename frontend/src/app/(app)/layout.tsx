@@ -17,8 +17,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const session = useSession();
 
   useEffect(() => {
-    if (session.isSuccess && session.data === null) {
+    if (!session.isSuccess) return;
+    if (session.data === null) {
       router.replace("/login");
+    } else if (session.data.email_verified_at === null) {
+      // Authenticated but e-mail not confirmed: no access to the app until they
+      // verify. Fortify logs a new registration straight in, so this is the
+      // gate that keeps that session out of the dashboard.
+      router.replace("/verify-email");
     }
   }, [session.isSuccess, session.data, router]);
 
@@ -31,7 +37,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (session.isLoading || !session.data) {
+  if (session.isLoading || !session.data || session.data.email_verified_at === null) {
     return (
       <div className="flex min-h-screen items-center justify-center" style={{ background: APP_BACKGROUND }}>
         <Skeleton className="h-8 w-40" />

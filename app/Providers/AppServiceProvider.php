@@ -5,7 +5,10 @@ namespace App\Providers;
 use App\Domain\Wallet\Events\FundsDeposited;
 use App\Domain\Wallet\Events\FundsTransferred;
 use App\Domain\Wallet\Events\TransactionReversed;
+use App\Domain\Wallet\Listeners\LogBusinessEvent;
 use App\Domain\Wallet\Listeners\PublishUserEvent;
+use App\Domain\Wallet\Listeners\SendTransactionEmail;
+use App\Redis\MultiClientRedisManager;
 use Closure;
 use Dedoc\Scramble\Scramble;
 use Dedoc\Scramble\Support\Generator\OpenApi;
@@ -20,12 +23,14 @@ use Dedoc\Scramble\Support\Generator\Types\StringType;
 use Dedoc\Scramble\Support\RouteInfo;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
+use Laravel\Telescope\TelescopeServiceProvider as LaravelTelescopeServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -34,7 +39,25 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // Swap in a Redis manager that honours a per-connection `client` key, so
+        // the SSE `pubsub` connection can run on predis (for pubSubLoop()) while
+        // queue/cache/Horizon stay on phpredis. `extend` wins even though the
+        // framework's RedisServiceProvider is deferred. See config/database.php.
+        $this->app->extend('redis', function ($manager, $app) {
+            $config = $app->make('config')->get('database.redis', []);
+
+            return new MultiClientRedisManager(
+                $app, Arr::pull($config, 'client', 'phpredis'), $config
+            );
+        });
+
+        // Telescope is dev-only and never auto-discovered (see composer.json
+        // `dont-discover`) — register it (and its gate provider) manually,
+        // and only outside production, so it never boots there by accident.
+        if ($this->app->environment('local') && class_exists(LaravelTelescopeServiceProvider::class)) {
+            $this->app->register(LaravelTelescopeServiceProvider::class);
+            $this->app->register(TelescopeServiceProvider::class);
+        }
     }
 
     /**
@@ -71,6 +94,20 @@ class AppServiceProvider extends ServiceProvider
         Event::listen(FundsDeposited::class, [PublishUserEvent::class, 'handleDeposited']);
         Event::listen(FundsTransferred::class, [PublishUserEvent::class, 'handleTransferred']);
         Event::listen(TransactionReversed::class, [PublishUserEvent::class, 'handleReversed']);
+
+        Event::listen(FundsDeposited::class, [LogBusinessEvent::class, 'handleDeposited']);
+        Event::listen(FundsTransferred::class, [LogBusinessEvent::class, 'handleTransferred']);
+        Event::listen(TransactionReversed::class, [LogBusinessEvent::class, 'handleReversed']);
+
+        // E-mail para quem recebe valor: destinatário de transferência, parte
+        // devolvida num estorno. Depósito e remetente não notificam.
+        Event::listen(FundsTransferred::class, [SendTransactionEmail::class, 'handleTransferred']);
+        Event::listen(TransactionReversed::class, [SendTransactionEmail::class, 'handleReversed']);
+
+        Gate::define('viewPulse', function ($user = null) {
+            return ! $this->app->environment('production')
+                || in_array(optional($user)->email, config('horizon.dashboard_emails', []), true);
+        });
 
         // Financial app: passwords are at least 10 chars, mixed case + a digit.
         Password::defaults(fn () => app()->isProduction()

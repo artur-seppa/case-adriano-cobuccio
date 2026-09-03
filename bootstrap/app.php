@@ -3,6 +3,7 @@
 use App\Domain\Wallet\Support\ProblemMapper;
 use App\Http\Middleware\AssignRequestId;
 use App\Http\Middleware\EnsureIdempotency;
+use App\Http\Middleware\LogRequest;
 use App\Http\Middleware\RedirectIfAuthenticated;
 use App\Http\Middleware\SetConnectionTimeouts;
 use Illuminate\Foundation\Application;
@@ -26,6 +27,15 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->statefulApi(); // Sanctum: EnsureFrontendRequestsAreStateful on the 'api' group
 
+        // Atrás do nginx (rede Docker): confiar no X-Forwarded-* para que
+        // scheme/host/URLs assinadas e cookies fiquem coerentes.
+        $middleware->trustProxies(at: [
+            '10.0.0.0/8',
+            '172.16.0.0/12',
+            '192.168.0.0/16',
+            '127.0.0.1',
+        ]);
+
         // Headless API: there is no `login` route, so a guest hitting a
         // protected route must never trigger `route('login')` in the auth
         // middleware (it throws RouteNotFoundException → 500). Returning null
@@ -45,6 +55,11 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->api(append: [
             SetConnectionTimeouts::class,
         ]);
+
+        // Global, same reason as AssignRequestId above: `/up` has no
+        // middleware group, and "1 structured line per request" must cover
+        // it too.
+        $middleware->append(LogRequest::class);
 
         $middleware->alias([
             'idempotency' => EnsureIdempotency::class,

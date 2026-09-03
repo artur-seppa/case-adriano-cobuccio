@@ -183,6 +183,10 @@ return [
         // subscribe loop wake up on idle to send a heartbeat and check for a
         // dropped client, instead of blocking forever on the next message.
         'pubsub' => [
+            // phpredis has no pubSubLoop(); the SSE subscribe loop needs predis.
+            // This overrides the top-level client for this connection only —
+            // queue/cache/Horizon keep phpredis via REDIS_CLIENT.
+            'client' => 'predis',
             'url' => env('REDIS_URL'),
             'host' => env('REDIS_HOST', '127.0.0.1'),
             'username' => env('REDIS_USERNAME'),

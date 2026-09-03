@@ -18,11 +18,14 @@ class AssignRequestId
         $id = preg_match(self::PATTERN, $incoming) === 1 ? $incoming : (string) Str::uuid();
 
         $request->attributes->set('request_id', $id);
-        app()->instance('request_id', $id);
 
         Context::add('request_id', $id);
         Context::add('ip', $request->ip());
         Context::add('user_id', optional($request->user())->id);
+
+        $traceparent = (string) $request->headers->get('traceparent', '');
+        $traceId = preg_match('/^00-([0-9a-f]{32})-/', $traceparent, $m) === 1 ? $m[1] : $id;
+        Context::add('trace_id', $traceId);
 
         $response = $next($request);
         $response->headers->set('X-Request-Id', $id);

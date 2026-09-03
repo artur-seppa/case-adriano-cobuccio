@@ -2,6 +2,7 @@ import { render, screen, waitFor, act } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ToastProvider } from "@/shared/ui/Toast";
 import { RealtimeProvider } from "../realtime-provider";
+import { ConnectionBanner } from "../ConnectionBanner";
 
 class FakeEventSource {
   static instances: FakeEventSource[] = [];
@@ -72,4 +73,53 @@ it("does not treat the ping heartbeat as a business event", async () => {
 
   act(() => FakeEventSource.instances[0].emit("ping", {}));
   await waitFor(() => expect(invalidateSpy).not.toHaveBeenCalled());
+});
+
+function renderWithBanner() {
+  return render(
+    <QueryClientProvider client={new QueryClient()}>
+      <ToastProvider>
+        <RealtimeProvider>
+          <ConnectionBanner />
+        </RealtimeProvider>
+      </ToastProvider>
+    </QueryClientProvider>,
+  );
+}
+
+it("does not flash the reconnecting banner when the stream recovers within the grace period", () => {
+  vi.useFakeTimers();
+  try {
+    renderWithBanner();
+    const es = FakeEventSource.instances[0];
+
+    act(() => es.onopen?.());
+    act(() => es.onerror?.());
+    act(() => vi.advanceTimersByTime(1000)); // still inside the grace window
+
+    expect(screen.queryByText("Reconectando…")).not.toBeInTheDocument();
+
+    act(() => es.onopen?.()); // reconnected
+    act(() => vi.advanceTimersByTime(10_000));
+
+    expect(screen.queryByText("Reconectando…")).not.toBeInTheDocument();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("shows the reconnecting banner once the stream stays down past the grace period", () => {
+  vi.useFakeTimers();
+  try {
+    renderWithBanner();
+    const es = FakeEventSource.instances[0];
+
+    act(() => es.onopen?.());
+    act(() => es.onerror?.());
+    act(() => vi.advanceTimersByTime(3000)); // past the grace window
+
+    expect(screen.getByText("Reconectando…")).toBeInTheDocument();
+  } finally {
+    vi.useRealTimers();
+  }
 });
