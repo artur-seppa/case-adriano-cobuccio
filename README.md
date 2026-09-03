@@ -73,7 +73,7 @@ Abrir `http://localhost`. Usuários de demo: `make fresh` (roda o `DemoSeeder`).
 | Pulse (saúde agregada) | `http://localhost/pulse` |
 | Horizon (fila) | `http://localhost/horizon` |
 | Telescope (forense, só local) | `http://localhost/telescope` |
-| Métricas Prometheus | `http://localhost/metrics` |
+| Métricas Prometheus | não exposto pelo proxy público — `docker compose exec app curl localhost:8000/metrics` (rede interna) |
 | Mailpit | `http://localhost:8025` |
 
 Sem TLS de propósito — zera setup local. Em deploy real, TLS termina no proxy/load balancer;
@@ -175,7 +175,7 @@ atrás do gate `viewApiDocs`.
 | **Pulse** | `http://localhost/pulse` — saúde agregada (requests, jobs, exceptions, drift do reconcile via `Pulse::set`) |
 | **Horizon** | `http://localhost/horizon` — fila Redis (`mail`/`default`), jobs recentes, throughput |
 | **Telescope** (só `local`) | `http://localhost/telescope` — requests, queries, jobs, eventos, cache; nunca registra fora de `environment('local')` |
-| **`/metrics`** (Prometheus) | `http://localhost/metrics` — 9 séries: `wallet_transactions_total`, `wallet_transaction_amount_cents`, `wallet_reversals_total`, `wallet_reconcile_drift_cents`, `wallet_reconcile_last_run_timestamp`, `wallet_insufficient_funds_total`, `wallet_idempotency_replays_total`, `wallet_http_server_request_duration_seconds`, `wallet_sse_active_connections` |
+| **`/metrics`** (Prometheus) | `docker compose exec app curl localhost:8000/metrics` — não exposto pelo nginx público de propósito (o NAT do Docker faz o host aparecer como o gateway da bridge, dentro de qualquer allowlist de CIDR "interno" sensata; um Prometheus real entra na rede `wallet` e faz scrape de `app:8000/metrics` direto). 9 séries: `wallet_transactions_total`, `wallet_transaction_amount_cents`, `wallet_reversals_total`, `wallet_reconcile_drift_cents`, `wallet_reconcile_last_run_timestamp`, `wallet_insufficient_funds_total`, `wallet_idempotency_replays_total`, `wallet_http_server_request_duration_seconds`, `wallet_sse_active_connections` |
 | Invariante contábil | `php artisan wallet:reconcile` — exit ≠ 0 e `Log::critical` em drift; roda a cada 15 min pelo scheduler e no CI sobre dados semeados |
 | Limpeza de idempotência | `php artisan idempotency:prune` — remove `idempotency_keys` expiradas; agendado de hora em hora |
 
