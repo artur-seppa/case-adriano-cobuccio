@@ -2,7 +2,7 @@
 
 use App\Domain\Wallet\Models\Wallet;
 use App\Models\User;
-use Illuminate\Auth\Notifications\VerifyEmail;
+use App\Notifications\QueuedVerifyEmail;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
@@ -14,7 +14,7 @@ it('points the verification link at the SPA origin with a host-independent signa
     $user = User::factory()->unverified()->create();
     $user->sendEmailVerificationNotification();
 
-    Notification::assertSentTo($user, VerifyEmail::class, function (VerifyEmail $notification) use ($user) {
+    Notification::assertSentTo($user, QueuedVerifyEmail::class, function (QueuedVerifyEmail $notification) use ($user) {
         $url = $notification->toMail($user)->actionUrl;
 
         expect($url)->toStartWith('http://localhost:3000/api/email/verify/'.$user->id.'/')

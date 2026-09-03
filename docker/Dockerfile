@@ -2,7 +2,7 @@
 
 # ---- vendor: composer deps sem dev ----
 FROM composer:2 AS vendor
-RUN install-php-extensions bcmath
+RUN install-php-extensions bcmath pcntl
 WORKDIR /app
 COPY composer.json composer.lock ./
 RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist --no-interaction

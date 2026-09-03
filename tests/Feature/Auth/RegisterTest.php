@@ -2,7 +2,7 @@
 
 use App\Domain\Wallet\Models\Wallet;
 use App\Models\User;
-use Illuminate\Auth\Notifications\VerifyEmail;
+use App\Notifications\QueuedVerifyEmail;
 use Illuminate\Support\Facades\Notification;
 
 it('registers a user, provisions a zero-balance wallet and sends verification', function () {
@@ -24,7 +24,7 @@ it('registers a user, provisions a zero-balance wallet and sends verification', 
     expect(Wallet::where('user_id', $user->id)->value('balance_cents'))->toBe(0)
         ->and($user->email_verified_at)->toBeNull();
 
-    Notification::assertSentTo($user, VerifyEmail::class);
+    Notification::assertSentTo($user, QueuedVerifyEmail::class);
 });
 
 it('rejects a duplicate email with problem+json 422', function () {

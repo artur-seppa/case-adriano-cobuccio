@@ -34,20 +34,29 @@ services:
     environment:
       RUN_MIGRATIONS: "true"
 
-  # ---------------------------------------------------------------------------
-  # Extra PHP processes. Kept out of the stack for CP2: `horizon` / `pulse:work`
-  # do not exist until Horizon (CP3) and Pulse (CP5) are installed, so running
-  # them now would only crash-loop. Uncomment per checkpoint.
-  #
   # habilitado na CP3 (Horizon):
-  # worker:
-  #   <<: *app-image
-  #   environment:
-  #     RUN_MIGRATIONS: "false"
-  #   depends_on:
-  #     app:
-  #       condition: service_healthy
-  #   command: ["php", "artisan", "horizon"]
+  worker:
+    <<: *app-image
+    environment:
+      RUN_MIGRATIONS: "false"
+    depends_on:
+      app:
+        condition: service_healthy
+    command: ["php", "artisan", "horizon"]
+    # Overrides the image's baked-in HTTP HEALTHCHECK (`curl .../up`) — this
+    # service runs the queue worker, not the HTTP server, so that check would
+    # never pass and the container would sit "unhealthy" forever.
+    healthcheck:
+      test: ["CMD", "php", "artisan", "horizon:status"]
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 6
+
+  # ---------------------------------------------------------------------------
+  # Extra PHP processes still pending a later checkpoint. `pulse:work` does
+  # not exist until Pulse (CP5) is installed, so running it now would only
+  # crash-loop. Uncomment when the corresponding checkpoint lands.
   #
   # habilitado na CP5 (Pulse):
   # pulse:
