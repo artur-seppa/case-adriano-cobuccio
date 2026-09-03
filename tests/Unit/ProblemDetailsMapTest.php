@@ -7,6 +7,7 @@ use App\Domain\Wallet\Support\ProblemMapper;
 use App\Domain\Wallet\ValueObjects\Money;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Http\Exceptions\ThrottleRequestsException;
+use Illuminate\Support\Facades\Context;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Tests\TestCase;
@@ -14,7 +15,7 @@ use Tests\TestCase;
 uses(TestCase::class);
 
 it('builds a problem body with the stable shape', function () {
-    app()->instance('request_id', 'req-123');
+    Context::add('request_id', 'req-123');
     $res = ProblemDetails::response(422, 'insufficient-funds', 'Insufficient funds', 'Saldo insuficiente.', [
         'available' => '10.00', 'requested' => '30.00',
     ]);
@@ -35,7 +36,7 @@ it('builds a problem body with the stable shape', function () {
 });
 
 it('omits detail and request_id when they are null', function () {
-    app()->forgetInstance('request_id');
+    Context::forget('request_id');
     $res = ProblemDetails::response(403, 'forbidden', 'This action is unauthorized.');
 
     $body = $res->getData(true);

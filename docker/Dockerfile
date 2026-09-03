@@ -29,7 +29,7 @@ RUN chmod +x /usr/local/bin/app-entrypoint
 USER app
 EXPOSE 8000
 HEALTHCHECK --interval=10s --timeout=3s --start-period=40s --retries=6 \
-  CMD curl -fsS http://localhost:8000/up || exit 1
+  CMD curl -fsS http://localhost:8000/health || exit 1
 
 ENTRYPOINT ["app-entrypoint"]
 CMD ["php", "artisan", "octane:start", "--server=frankenphp", "--host=0.0.0.0", "--port=8000", "--workers=auto", "--max-requests=500"]

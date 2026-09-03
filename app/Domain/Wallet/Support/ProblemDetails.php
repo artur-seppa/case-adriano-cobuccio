@@ -3,6 +3,7 @@
 namespace App\Domain\Wallet\Support;
 
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Context;
 
 final class ProblemDetails
 {
@@ -18,7 +19,7 @@ final class ProblemDetails
             'title' => $title,
             'status' => $status,
             'detail' => $detail,
-            'request_id' => app()->bound('request_id') ? app('request_id') : null,
+            'request_id' => Context::get('request_id'),
         ], fn ($v) => $v !== null);
 
         return new JsonResponse($body + $extra, $status, [

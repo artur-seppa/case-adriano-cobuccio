@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Domain\Wallet\Events\FundsDeposited;
 use App\Domain\Wallet\Events\FundsTransferred;
 use App\Domain\Wallet\Events\TransactionReversed;
+use App\Domain\Wallet\Listeners\LogBusinessEvent;
 use App\Domain\Wallet\Listeners\PublishUserEvent;
 use App\Redis\MultiClientRedisManager;
 use Closure;
@@ -83,6 +84,10 @@ class AppServiceProvider extends ServiceProvider
         Event::listen(FundsDeposited::class, [PublishUserEvent::class, 'handleDeposited']);
         Event::listen(FundsTransferred::class, [PublishUserEvent::class, 'handleTransferred']);
         Event::listen(TransactionReversed::class, [PublishUserEvent::class, 'handleReversed']);
+
+        Event::listen(FundsDeposited::class, [LogBusinessEvent::class, 'handleDeposited']);
+        Event::listen(FundsTransferred::class, [LogBusinessEvent::class, 'handleTransferred']);
+        Event::listen(TransactionReversed::class, [LogBusinessEvent::class, 'handleReversed']);
 
         // Financial app: passwords are at least 10 chars, mixed case + a digit.
         Password::defaults(fn () => app()->isProduction()

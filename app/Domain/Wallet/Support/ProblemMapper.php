@@ -14,6 +14,7 @@ use Illuminate\Auth\AuthenticationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Context;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
@@ -103,7 +104,7 @@ final class ProblemMapper
         Log::critical($slug, [
             'exception' => $e::class,
             'message' => $e->getMessage(),
-            'request_id' => app()->bound('request_id') ? app('request_id') : null,
+            'request_id' => Context::get('request_id'),
         ]);
 
         return ProblemDetails::response(500, $slug, 'Internal server error.');
